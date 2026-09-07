@@ -61,7 +61,13 @@ def eta_rho(t_phys):
 
 def eta_sigma(t_phys):
     _, _, _, lamS_t, lamHS_t = get_running_couplings(t_phys)
-    gamma = (1.0 / (16.0 * np.pi ** 2)) ** 2 * (18.0 * lamS_t ** 2 + 2.0 * lamHS_t ** 2)
+    # gamma_S from PyR@TE3 for this model (matches frg_pinn.tex Sec. 2.3 and the
+    # PINN get_eta_sigma in frg_pinns_higgs_singlet/FRG_residual.py):
+    #   gamma_S = (16 pi^2)^-2 (lambda_HS^2 + 3 lambda_S^2),  eta_S = 2 gamma_S.
+    # Runs before 2026-09 used (18 lamS^2 + 2 lamHS^2) -- the 1-loop beta_lamS
+    # coefficient reused as a proxy; eta_S ~ 1e-4 either way and its effect on the
+    # flow is ~1e-5.
+    gamma = (1.0 / (16.0 * np.pi ** 2)) ** 2 * (3.0 * lamS_t ** 2 + 1.0 * lamHS_t ** 2)
     return 2.0 * gamma
 
 
