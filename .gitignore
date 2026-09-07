@@ -1,0 +1,24 @@
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+*.ipynb
+
+# training / solver outputs
+data_UV/
+data_UV_*/
+data_UV_2D/
+data_sigma/
+mydata/
+plots_pinn/
+logs/
+results/
+plots/
+*.log
+*.npz
+*.pt
+*.npy
+
+# editor / OS
+.DS_Store
+*.swp

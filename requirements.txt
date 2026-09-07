@@ -1,0 +1,9 @@
+# Core dependencies (PINN training + grid solver + plotting)
+torch>=2.1
+numpy
+scipy
+matplotlib
+
+# Optional: only needed for the O(3) bounce action of Sec. 6.4
+#   (bounce_action.py / plot_vacuum_line_bounce.py in frg_pinns_higgs_singlet/)
+# cosmoTransitions

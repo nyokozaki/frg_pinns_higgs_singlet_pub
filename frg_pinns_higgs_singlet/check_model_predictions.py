@@ -1,0 +1,82 @@
+import torch
+import numpy as np
+import torch.autograd as autograd
+
+
+def check_model_predictions(model, device, tree_params):
+
+    [aH, aS, lamH, lamS, lamHS] = tree_params  
+    n_samp = int(3)
+
+    t_in = torch.empty(n_samp, 1, device=device).uniform_(-1.0, 1.0)
+    rho_in = torch.empty(n_samp, 1, device=device).uniform_(-1.0, 1.0)
+    sigma_in = torch.empty(n_samp, 1, device=device).uniform_(-1.0, 1.0)
+
+    t_in.requires_grad_(True)
+    rho_in.requires_grad_(True)
+    sigma_in.requires_grad_(True)
+
+    # physical coordinates
+    t_phys = model.unscale_t(t_in)
+    rho_phys = model.unscale_rho(rho_in)
+    sigma_phys = model.unscale_sigma(sigma_in)
+
+    u, ur, us, urr, uss, urs = model(t_in, rho_in, sigma_in)
+
+    u_rr = urr.clone().detach().cpu().numpy().flatten()
+    u_ss = uss.clone().detach().cpu().numpy().flatten()
+
+    mHsq = ((ur - urr * rho_phys - urs * sigma_phys)*torch.exp(2.0*t_phys)).clone().detach().cpu().numpy().flatten()
+    mSsq = ((us - uss * sigma_phys - urs * rho_phys)*torch.exp(2.0*t_phys)).clone().detach().cpu().numpy().flatten()
+    print(u_rr/(2.0*lamH), u_ss/(2.0*lamS), (mHsq-aH)/np.abs(aH), (mSsq-aS)/np.abs(aS))
+
+    '''
+    u = model(t_in, rho_in, sigma_in)
+    u_rho_in = autograd.grad(
+        u, rho_in,
+        grad_outputs=torch.ones_like(u),
+        create_graph=True,
+        retain_graph=True
+    )[0]
+
+    u_sigma_in = autograd.grad(
+        u, sigma_in,
+        grad_outputs=torch.ones_like(u),
+        create_graph=True,
+        retain_graph=True
+    )[0]
+
+    u_rhorho_in = autograd.grad(
+        u_rho_in, rho_in,
+        grad_outputs=torch.ones_like(u_rho_in),
+        create_graph=True,
+        retain_graph=True
+    )[0]
+
+    u_sigmasigma_in = autograd.grad(
+        u_sigma_in, sigma_in,
+        grad_outputs=torch.ones_like(u_sigma_in),
+        create_graph=True,
+        retain_graph=True
+    )[0]
+
+    u_rhosigma_in = autograd.grad(
+        u_rho_in, sigma_in,
+        grad_outputs=torch.ones_like(u_rho_in),
+        create_graph=True,
+        retain_graph=True
+    )[0]
+    
+    u_rho = model.A_RHO * u_rho_in
+    u_rhorho = model.A_RHO * model.A_RHO * u_rhorho_in
+    u_sigmasigma = model.A_SIGMA * model.A_SIGMA * u_sigmasigma_in
+    u_rhosigma = model.A_RHO * model.A_SIGMA * u_rhosigma_in
+
+    u_rr = u_rhorho.clone().detach().cpu().numpy().flatten()
+    #u_ss = u_sigmasigma.clone().detach().cpu().numpy().flatten()
+
+    msq = ((u_rho - u_rhorho * rho_phys - u_rhosigma * sigma_phys)*torch.exp(2.0*t_phys)).clone().detach().cpu().numpy().flatten()
+    rint(u_rr/(2.0*lamH), (msq-aH)/np.abs(aH))
+    '''
+
+

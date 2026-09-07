@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+data_UV/
+data_UV_2D/
+data_sigma/
+data_UV_*/
+mydata/
+plots_pinn/
+*.log
