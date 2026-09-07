@@ -25,7 +25,7 @@ eta_min = 1e-5 # learning rate is going down to this value
 c_mag_lower = 0.4
 c_mag_upper = 3.0
 hinge_beta = 100.0 # softplus sharpness for sign/mag hinges in loss_extensions.py (higher = closer to ReLU)
-skip_2nd = False # skip 2nd block for optuna
+skip_2nd = False # if True, train only the UV t-block (skip the IR half)
 do_extra=True
 non_resume = False
 #non_resume = True 
