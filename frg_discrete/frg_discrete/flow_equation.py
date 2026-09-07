@@ -109,7 +109,7 @@ def _rloop_from_derivs(t_phys, rho, sigma, u_rho, u_sigma, u_rhorho, u_sigmasigm
                この項からノイズを拾わなくなる、という狙い。ただし disc=disc_cut**2
                の境界に微分不連続の折れ目が残る)。
     デフォルト (disc_delta=disc_cut=0.0) は従来通り sqrt(clip(disc, EPS, None))
-    を使い、挙動を変えない (frg_discrete3等の既存呼び出し元との後方互換性のため)。
+    を使い、挙動を変えない (既存の呼び出し元との後方互換性のため)。
     mass_floor : Higgs/singlet質量固有値 (mG2, m1_sq, m2_sq) の規格化質量二乗
                  1+m^2 に対するハードクリップのfloor値。mass_floor>0 のとき
                  _inv_sqrt と有限温度項のEの両方で clip(1+m^2, EPS, None) の

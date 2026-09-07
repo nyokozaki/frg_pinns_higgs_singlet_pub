@@ -170,7 +170,7 @@ def u_thermal_finiteT(t_phys, rho_phys, sigma_phys):
     need the physical (ring-resummed) potential must add get_u_ring() themselves;
     this bare 1-loop version is what loss_extensions.py's del_aH (-> F_H_target)
     is built from, deliberately, since a third rho-derivative of the ring piece
-    is non-analytic at rho=0 (see CLAUDE.md).
+    is non-analytic at rho=0 (paper Sec. 5.2).
 
     Included modes:
       - scalar: Goldstones + 2 scalar eigenmodes

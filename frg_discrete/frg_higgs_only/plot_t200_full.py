@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-figures/case_a_tree_slices_cw_thermal.png (T_raw=100 GeV, 8曲線版) を
-T_raw=200 GeV で再現する (原稿 frg_discrete4_relaxation_and_prior.tex の
-Figure \\ref{fig:slices} 差し替え用)。
+8-curve slice comparison of the Higgs-only relaxation benchmark at
+T_raw = 200 GeV (the Higgs-only relaxation figure of the paper, Sec. 4.3).
 
 8曲線の対応 (原稿の enumerate (1)-(8) と同じ):
   (1) numerical (relax_tree)              -> results/case_a.npz (T非依存)

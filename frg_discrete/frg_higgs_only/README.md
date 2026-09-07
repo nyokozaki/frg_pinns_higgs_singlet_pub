@@ -49,7 +49,7 @@ python relax_tree.py --n-rho 41 --n-sigma 41 --n-t 100
 | 中心差分 relaxation | 81x81, Nt=200 | 0.24% |
 | 中心差分 relaxation | 121x121, Nt=200 | 0.13% |
 | 中心差分 relaxation | 121x121, Nt=400 | 0.12% (時間刻みを倍にしてもほぼ不変 → 空間打ち切り誤差が支配的) |
-| Chebyshev (frg_discrete3) | 31x31 | 0.073% |
+| Chebyshev pseudo-spectral (separate solver, not in this release) | 31x31 | 0.073% |
 
 ## 結論
 
@@ -64,8 +64,7 @@ python relax_tree.py --n-rho 41 --n-sigma 41 --n-t 100
 2. それでもChebyshevの指数収束にはまだ届かない (121x121 という
    Chebyshevの31x31よりずっと多い点数でも、Chebyshevの0.073%を上回れない)
    — 中心差分はあくまで多項式に対して厳密ではなく代数的収束なので、
-   tree多項式部分に対する「Chebyshevは多項式に厳密」という御利益
-   (frg_discrete3/README.md 参照) は持たない。
+   tree多項式部分に対する「Chebyshevは多項式に厳密」という御利益は持たない。
 3. tree-only (線形) の場合、「まとめて解く」こと自体は数学的にCN
    マーチングと同値なので、リラクゼーション法の**本当の**御利益
    (発散しがちなforward shootingを、全軌道の自己無撞着なNewton解に

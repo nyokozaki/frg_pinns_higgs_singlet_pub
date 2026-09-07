@@ -138,7 +138,7 @@ def u_thermal_finiteT(t_phys, rho_phys):
     (see show_UV1D.py, compare_ext_noext.py); this bare 1-loop version is what
     loss_extensions.py's del_aH (-> F_H_target) is built from, deliberately,
     since a third rho-derivative of the ring piece is non-analytic at rho=0
-    (see CLAUDE.md).
+    (paper Sec. 5.2).
 
     Included modes:
       - scalar: Higgs eigenmode + 3 Goldstones

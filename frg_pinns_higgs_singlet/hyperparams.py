@@ -1,26 +1,19 @@
-w_mass_rho = 0.0 # for rho mass term in loss sign
-# w_sign_r2/w_sign_s2 (below) and w_mag_r2_hi/w_mag_s2_hi (further below) only
-# drive terms that exist in the rho_cw_cut/sigma_cw_cut "hi" region added this
-# session (see loss_extensions.py) and have NO counterpart in
-# previous_ReLU_logic/ (there the equivalent domain-wide D_H/D_S sign block is
-# commented out, and quartic self-coupling only has the flat 0.99 cap below,
-# no RGE-target band at all). Kept at 0.0 so the active finite-T branch reduces
-# to previous_ReLU_logic's finite-T branch with torch.relu -> _hinge (softplus)
-# as the only difference — don't set these nonzero without re-deriving what
-# they'd add on top of that baseline.
-w_sign_r2 = 0 # for rho self-coupling in loss sign (finite T: rho > rho_cw_cut region only; see note above)
-w_mass_mag_rho = 0 # for rho mass term in loss mag
-w_mag_r2 = 0.1 # for rho self coupliing term in loss mag
-# finite T: w_mag_r2 is the domain-wide flat cap |D_H_NN/lamH|<0.99 only (this
-# term DOES exist in previous_ReLU_logic, same formula); the rho > rho_cw_cut
-# band vs the RGE target uses the separate w_mag_r2_hi below (see note above).
-w_mag_r2_hi = 0 # for rho quartic vs RGE-target band, rho > rho_cw_cut region only (finite T; no zero-T or previous_ReLU_logic counterpart — see note above)
+# Soft perturbative-consistency weights (see loss_extensions.py, paper Sec. 5.2 / Appendix A).
+# w_sign_r2 / w_sign_s2 and w_mag_r2_hi / w_mag_s2_hi act only in the
+# rho > rho_cw_cut / sigma > sigma_cw_cut regions. In the finite-T runs of the
+# paper the Higgs mass term carries no sign constraint (w_mass_rho = w_sign_r2 =
+# w_mass_mag_rho = 0); the sign hinge is applied only to the singlet mass term.
+w_mass_rho = 0.0 # Higgs mass term, sign hinge
+w_sign_r2 = 0    # Higgs quartic, sign hinge (rho > rho_cw_cut region only)
+w_mass_mag_rho = 0 # Higgs mass term, magnitude band
+w_mag_r2 = 0.1   # Higgs quartic, domain-wide flat cap |D_H_NN/lamH| < 0.99
+w_mag_r2_hi = 0  # Higgs quartic vs RGE-target band (rho > rho_cw_cut region only)
 
-w_mass_sigma = 1.0 # for sigma mass terms in loss sign
-w_sign_s2 = 0.0 # for sigma self-coupling in loss sign (finite T: sigma > sigma_cw_cut region only; see note above)
-w_mass_mag_sigma = 2.0 # for sigma mass term in loss mag
-w_mag_s2 = 1.0 # for sigma self coupliing term in loss mag
-w_mag_s2_hi = 1.0 # for sigma quartic vs RGE-target band, sigma > sigma_cw_cut region only (finite T; no zero-T or previous_ReLU_logic counterpart — see note above)
+w_mass_sigma = 1.0 # singlet mass term, sign hinge
+w_sign_s2 = 0.0    # singlet quartic, sign hinge (sigma > sigma_cw_cut region only)
+w_mass_mag_sigma = 2.0 # singlet mass term, magnitude band
+w_mag_s2 = 1.0     # singlet quartic, domain-wide flat cap
+w_mag_s2_hi = 1.0  # singlet quartic vs RGE-target band (sigma > sigma_cw_cut region only)
 
 w_sign_mix = 1e-2 # for lamHS in loss_sign (not used in finite T)
 #w_sign_mix = 0 # for lamHS in loss_sign (not used in finite T)
