@@ -1,30 +1,33 @@
 """
-frg_pinns_higgs_singlet/loss_extensions.py の
-`loss_sign_and_mag_couplings` (符号・大きさのソフト制約) を、PINNの
-"損失" ではなく Newton-Krylov リラクゼーション法の "残差" として使える
-形に翻訳したもの。
+Translation of `loss_sign_and_mag_couplings` (the soft sign/magnitude
+constraint) from frg_pinns_higgs_singlet/loss_extensions.py into a form usable as
+the "residual" of a Newton-Krylov relaxation method rather than a PINN "loss".
 
-PINN側では、各点での実効quartic結合定数 (u_rhorho/2, u_sigmasigma/2,
-u_rhosigma) と実効質量パラメータ (u_rho - u_rhorho*rho - u_rhosigma*sigma
-等) を、摂動論的RG-improved running coupling/massの値と比較し、
-  - 符号が違っていたらペナルティ (sign hinge)
-  - 目標値に対する比が [c_lower, c_upper] の帯から外れたらペナルティ (magnitude band)
-という "大まかな向きと大きさだけを合わせる" 緩い制約を損失に加えている
-(点ごとの値を厳密に一致させるものではない)。
+On the PINN side, the effective quartic couplings at each point (u_rhorho/2,
+u_sigmasigma/2, u_rhosigma) and the effective mass parameters
+(u_rho - u_rhorho*rho - u_rhosigma*sigma, etc.) are compared against the
+perturbative RG-improved running couplings/masses, and a loose constraint that
+"only fixes the rough direction and magnitude" is added to the loss:
+  - a penalty if the sign disagrees (sign hinge)
+  - a penalty if the ratio to the target is outside the band [c_lower, c_upper]
+    (magnitude band)
+(it does not force pointwise agreement).
 
-ここではこれを、各格子点の flow_rhs (du/dt) に加える forcing 項として
-実装する。rloop (質量固有値・熱閾値関数から来る反応項) と同じ "場所"
-(du/dtの中の反応項) に、もう1種類の反応項として加わる形になる。
+Here this is implemented as a forcing term added to flow_rhs (du/dt) at each grid
+point. It enters as a second kind of reaction term in the same "place" as rloop
+(the reaction term coming from the mass eigenvalues and thermal threshold
+functions) within du/dt.
 
-注意 (フェアネスに関する留意点):
-    weight_sign, weight_mag > 0 の間は、Newtonが実際に解く方程式は
-    "純粋なWetterichフロー R=0" ではなく "Wetterichフロー + このsoft
-    forcing" になる。収束解はこの摂動論的priorに引っ張られたバイアス解
-    であり、真のFRG解とは一般に一致しない (PINN側もこのlossを完全に
-    ゼロへ追い込んでいるわけではなく、他のloss項との重み付き妥協点で
-    止まっているので、この点はPINN側と同じ性質を持つ)。継続法として
-    使う場合 (--coupling-prior-anneal-iters) は、weightを段階的に0まで
-    下げていくことで、最終的な収束解を純粋なフロー方程式の解に戻せる。
+Note (a fairness caveat):
+    While weight_sign, weight_mag > 0, the equation Newton actually solves is not
+    "the pure Wetterich flow R=0" but "the Wetterich flow + this soft forcing".
+    The converged solution is a biased solution pulled toward this perturbative
+    prior and does not in general coincide with the true FRG solution (the PINN
+    side does not drive this loss all the way to zero either; it stops at a
+    weighted compromise with the other loss terms, so this shares the same
+    property as the PINN side). When used as a continuation method
+    (--coupling-prior-anneal-iters), decaying the weight stepwise to 0 recovers
+    the pure-flow-equation solution as the final converged solution.
 """
 
 import numpy as np
@@ -57,13 +60,14 @@ def _softplus(x, beta=_SOFTPLUS_BETA):
 
 
 def _sign_hinge(target, val, norm):
-    """target と符号が一致していれば0、逆符号なら |val|/norm に比例したペナルティ。"""
+    """0 if the sign agrees with target; if the signs are opposite, a penalty
+    proportional to |val|/norm."""
     s = np.sign(target)
     return _softplus(-(s * val) / norm)
 
 
 def _mag_band(target, val, norm, c_lower, c_upper):
-    """|val| が |target| の [c_lower, c_upper] 倍の帯に入っていれば0。"""
+    """0 if |val| lies in the band [c_lower, c_upper] times |target|."""
     mt = np.abs(target)
     mv = np.abs(val)
     return _softplus((c_lower * mt - mv) / norm) + _softplus((mv - c_upper * mt) / norm)
@@ -84,20 +88,22 @@ def coupling_prior_residual(
     disable_sign_F_H=False,
 ):
     """
-    摂動論の running quartics/masses に対する符号・大きさのソフト制約を、
-    格子点ごとの forcing (flow_rhs に加算する項) として評価する。
+    Evaluate the soft sign/magnitude constraint against the perturbative
+    running quartics/masses as a per-grid-point forcing term (added to flow_rhs).
 
-    weight_sign == weight_mag == 0.0 のときは常にゼロを返す (デフォルトの
-    挙動を変えない)。
+    Returns zero whenever weight_sign == weight_mag == 0.0 (does not change the
+    default behaviour).
 
-    rho_cut, sigma_cut : PINN側 hp.rho_cw_cut/sigma_cw_cut (デフォルト3.0) と
-        同じ役割のソフトマスク境界。既定値3.0はこのソルバーの格子範囲
-        (rho_max, sigma_max ~ 1.75) を覆うので事実上マスク無効。
-    f_threshold, d_threshold : 目標値 (target) がtree値からほぼ動いていない
-        (相対的に小さすぎて摂動論的に信頼できない) 領域を無視する閾値。
-    disable_sign_F_H : True のとき、rho方向のmass-term (F_H, aH_NN vs
-        aH_run/aH_tree) に対する sign hinge penalty だけを sign_pen から
-        外す (magnitude band penalty 側の F_H 制約はそのまま残す)。
+    rho_cut, sigma_cut : soft-mask boundary playing the same role as the PINN's
+        hp.rho_cw_cut/sigma_cw_cut (default 3.0). The default 3.0 covers this
+        solver's grid range (rho_max, sigma_max ~ 1.75), so the mask is
+        effectively inactive.
+    f_threshold, d_threshold : thresholds for ignoring regions where the target
+        has barely moved from the tree value (too small relative to it to be
+        perturbatively trustworthy).
+    disable_sign_F_H : when True, remove only the sign hinge penalty for the
+        rho-direction mass term (F_H, aH_NN vs aH_run/aH_tree) from sign_pen
+        (the F_H constraint on the magnitude-band penalty side is kept).
     """
     if weight_sign == 0.0 and weight_mag == 0.0:
         return 0.0
@@ -153,8 +159,9 @@ def coupling_prior_residual(
     mag_pen = (
         mask_F_H * _mag_band(F_H_target, F_H_NN, norm_aH, c_lower, c_upper)
         + mask_F_S * _mag_band(F_S_target, F_S_NN, norm_aS, c_lower, c_upper)
-        # quartic側は上限のみ (真空安定性を壊す方向にNNが暴走しないようにする
-        # loss_extensions.py の _loss_sign_and_mag_couplings_tval_finiteT と同じ発想)
+        # quartics: upper bound only (keeping the NN from running away in a
+        # direction that would break vacuum stability; same idea as
+        # _loss_sign_and_mag_couplings_tval_finiteT in loss_extensions.py)
         + _softplus(np.abs(D_H_NN / lamH) - quartic_ratio_cap)
         + _softplus(np.abs(D_S_NN / lamS) - quartic_ratio_cap)
         + _softplus(np.abs(D_HS_NN / lamHS) - quartic_ratio_cap)

@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """
-relax_full.py の w残差版 (Higgs-only 1次元rho版)。
+The w-residual version of relax_full.py (Higgs-only, 1D rho).
 
-u(t,rho) = u_tree_exact(t,rho) + w(t,rho) とおき、Newtonの自由変数を u では
-なく w にする。u_tree_exact は自由フロー (rloop=0, eta=0) の厳密解
-(離散化誤差ゼロ) なので、この分解によって w が満たす式
-(flow_equation_higgs_only.flow_rhs_w) には "-4u+2rho u_rho" の正準スケーリング
-が u_tree側で厳密にキャンセルされ、wだけを離散化すればよくなる。
+Write u(t,rho) = u_tree_exact(t,rho) + w(t,rho) and make the Newton free
+variable w rather than u. Since u_tree_exact is the exact solution of the free
+flow (rloop=0, eta=0) with zero discretization error, this split means the
+equation satisfied by w (flow_equation_higgs_only.flow_rhs_w) has the canonical
+scaling "-4u+2rho u_rho" cancelled exactly on the u_tree side, so only w has to
+be discretized.
 
-境界条件: w(t=0) = u_thermal_finiteT(t=0,...) (u_seed = u_tree_exact +
-u_thermal_finiteT なので、u_tree_exact(t=0)を引いた残りがそのまま w(t=0)になる)。
+Boundary condition: w(t=0) = u_thermal_finiteT(t=0,...) (since
+u_seed = u_tree_exact + u_thermal_finiteT, subtracting u_tree_exact(t=0) leaves
+exactly w(t=0)).
 
-使い方:
+Usage:
     python relax_full_w.py --n-rho 21 --n-t 40
 """
 
@@ -50,7 +52,7 @@ def parse_args():
     p.add_argument("--method", type=str, default="lgmres")
     p.add_argument("--scheme", type=str, default="cn", choices=["cn", "be"])
     p.add_argument("--warm-start", type=str, default=None,
-                   help="前回の relax_full_w.py 出力npz (W_all_raw) を初期推定値として使う。")
+                   help="use a previous relax_full_w.py output npz (W_all_raw) as the initial guess.")
     p.add_argument("--out", type=str, default="results/relax_full_w.npz")
     return p.parse_args()
 

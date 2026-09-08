@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-frg_discrete/solve_flow.py の singlet除去版(Higgs-only, 1次元rho)。
+Singlet-free version of frg_discrete/solve_flow.py (Higgs-only, 1D rho).
 
-FRGフロー方程式を method-of-lines + scipy.integrate.solve_ivp で"従来型"に
-(t=0からt_endへ本当に前進積分して)解く、relax_full.py (Newton-Krylovに
-よる全時刻同時緩和法) との比較用リファレンス。
+Solves the FRG flow equation the "conventional" way, with method of lines +
+scipy.integrate.solve_ivp (actually forward-integrating from t=0 to t_end), as a
+reference for comparison with relax_full.py (the Newton-Krylov all-times
+simultaneous relaxation method).
 
-使い方:
+Usage:
     python solve_flow.py --n-rho 21 --out results/solve_flow.npz
 """
 
@@ -43,7 +44,7 @@ def build_jac_sparsity(n_rho, bandwidth=3):
 
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--n-rho", type=int, default=21, help="rho方向の格子点数")
+    p.add_argument("--n-rho", type=int, default=21, help="number of grid points in rho")
     p.add_argument("--rho-max", type=float, default=1.75)
     p.add_argument("--t0", type=float, default=0.0)
     p.add_argument("--t-end", type=float, default=None)

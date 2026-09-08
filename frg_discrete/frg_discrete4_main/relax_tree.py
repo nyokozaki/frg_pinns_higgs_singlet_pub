@@ -1,29 +1,32 @@
 #!/usr/bin/env python3
 """
-tree-only (rloop=eta=0) の自由フローを、"shooting" (t=0からの初期値問題として
-forward積分) ではなく、リラクゼーション法 (space x time をまとめて離散化し、
-1つの大域的な連立方程式として解く) で解く。
+Solve the tree-only (rloop=eta=0) free flow with a relaxation method
+(discretize space x time together and solve one global system), rather than by
+"shooting" (forward integration as an initial-value problem from t=0).
 
-方程式: du/dt = -4u + 2*rho*u_rho + 2*sigma*u_sigma  (t: 0 -> t_range, t_range<0)
+Equation: du/dt = -4u + 2*rho*u_rho + 2*sigma*u_sigma  (t: 0 -> t_range, t_range<0)
 
-これは線形PDEなので、Newton反復は不要 (1回の線形ソルブで厳密に収束する)。
-空間微分は中心差分 (grid_fd.Grid2D の "central" スキームと同じ2次精度
-ステンシル)、時間積分は Crank-Nicolson (中心差分、2次精度) で離散化し、
-全時刻ステップをまとめた1つのブロック双対角線形系として解く。
+This is a linear PDE, so no Newton iteration is needed (one linear solve
+converges exactly). Space derivatives use a central difference (the same
+second-order stencil as the "central" scheme in grid_fd.Grid2D), time
+integration uses Crank-Nicolson (central, second order), and all time steps are
+solved as one block-bidiagonal linear system.
 
-このブロック双対角系を「まとめて」解くのは、数学的には同じ離散化での
-CN時間マーチングと厳密に同値 (下三角ブロック構造なので、ブロック消去 =
-逐次マーチング)。したがって tree-only (線形) の場合、リラクゼーション法
-固有の御利益 (Newtonによる大域的な自己無撞着解の探索が、発散しがちな
-forward shootingを回避できること) はまだ現れない。ここでの本当の狙いは:
+Solving this block-bidiagonal system "all at once" is mathematically exactly
+equivalent to CN time marching with the same discretization (block elimination
+= sequential marching, because of the lower-triangular block structure). So for
+the tree-only (linear) case the benefit specific to a relaxation method (that
+Newton's global search for a self-consistent solution avoids the divergence-
+prone forward shooting) does not yet appear. The real aims here are:
 
-  1. central (2次精度, 対称) 差分 + 非適応的な大域線形ソルブが、
-     以前の upwind (1次精度) + 適応刻み幅BDFでの27%誤差を改善するか。
-  2. rloopを後で足したときに使う「全軌道を1つの連立方程式として持つ」
-     という枠組みの基盤を作ること (rloopが入ると非線形になり、Newton
-     反復が本当に意味を持つようになる)。
+  1. Check whether a central (second-order, symmetric) difference + a
+     non-adaptive global linear solve improves on the 27% error of the previous
+     upwind (first-order) + adaptive-step BDF.
+  2. Build the framework of "holding the whole trajectory as one system", which
+     is used later when rloop is added (rloop makes the system nonlinear, and
+     then Newton iteration genuinely matters).
 
-使い方:
+Usage:
     python relax_tree.py --n-rho 41 --n-sigma 41 --n-t 100
 """
 
@@ -41,11 +44,12 @@ from seed_potential import u_seed, u_tree_exact
 
 
 def _fd_first_deriv_coeffs(offsets):
-    """整数offsets (格子点からの相対位置) を使った1階微分の有限差分係数を、
-    Fornberg法 (未定係数法) で厳密に求める。
+    """Finite-difference coefficients for a first derivative on integer offsets
+    (positions relative to the grid point), obtained exactly by the Fornberg
+    method (method of undetermined coefficients).
 
-    sum_k c_k * f(x+offsets_k*h) = h*f'(x) + O(h^len(offsets)) となる c を返す
-    (m=len(offsets)点のステンシルで、次数 m-1 精度)。
+    Returns c such that sum_k c_k * f(x+offsets_k*h) = h*f'(x) + O(h^len(offsets))
+    (an m=len(offsets)-point stencil, accurate to order m-1).
     """
     offsets = np.asarray(offsets, dtype=float)
     m = len(offsets)
@@ -56,14 +60,16 @@ def _fd_first_deriv_coeffs(offsets):
 
 
 def build_D1_central(n, h, order=2):
-    """1階微分の疎行列を返す。
+    """Return the sparse first-derivative matrix.
 
-    order=2: 内部2次精度中心差分(3点)・境界2次精度片側差分
-        (frg_discrete/grid_fd.py Grid2D._first_deriv_1d と同じステンシル)。
-    order=4: 内部4次精度中心差分(5点)・境界寄り1点は4次精度片側寄りステンシル
-        (5点、非対称)・最端点は4次精度片側差分(5点)。
-        いずれもFornberg法で係数を導出するので、次数を上げても手打ちの
-        係数ミスが入らない。
+    order=2: second-order central difference (3-point) in the interior,
+        second-order one-sided difference at the boundaries (the same stencil as
+        frg_discrete/grid_fd.py Grid2D._first_deriv_1d).
+    order=4: fourth-order central difference (5-point) in the interior, a
+        fourth-order asymmetric 5-point stencil for the near-boundary point, and
+        a fourth-order one-sided 5-point difference at the edge.
+        All coefficients are derived by the Fornberg method, so raising the order
+        does not introduce hand-typed coefficient errors.
     """
     rows, cols, vals = [], [], []
 
@@ -83,7 +89,7 @@ def build_D1_central(n, h, order=2):
         add(n - 1, n - 1, 3.0 / (2 * h)); add(n - 1, n - 2, -4.0 / (2 * h)); add(n - 1, n - 3, 1.0 / (2 * h))
     elif order == 4:
         if n < 5:
-            raise ValueError("order=4 には各方向5点以上の格子が必要です")
+            raise ValueError("order=4 requires at least 5 grid points per direction")
         add_stencil(0, [0, 1, 2, 3, 4])
         add_stencil(1, [-1, 0, 1, 2, 3])
         for i in range(2, n - 2):
@@ -97,8 +103,8 @@ def build_D1_central(n, h, order=2):
 
 
 def build_spatial_operator(rho, sigma, order=2):
-    """A = -4*I + 2*rho*d/drho + 2*sigma*d/dsigma を (n_rho*n_sigma)^2 の
-    疎行列として構築する。flatten順は U.ravel() (rho-major, C順)。"""
+    """Build A = -4*I + 2*rho*d/drho + 2*sigma*d/dsigma as an (n_rho*n_sigma)^2
+    sparse matrix. The flatten order is U.ravel() (rho-major, C order)."""
     n_rho, n_sigma = len(rho), len(sigma)
     drho = rho[1] - rho[0]
     dsigma = sigma[1] - sigma[0]
@@ -125,15 +131,16 @@ def build_spatial_operator(rho, sigma, order=2):
 
 def solve_relaxation(rho, sigma, U0_flat, t0, t_end, n_t):
     """
-    リラクゼーション法: t方向にNt+1点、Crank-Nicolsonで離散化した
-    ブロック双対角の大域線形系を解く。
+    Relaxation method: discretize the t direction into Nt+1 points with
+    Crank-Nicolson and solve the block-bidiagonal global linear system.
 
     (I - 0.5*dt*A) U^n = (I + 0.5*dt*A) U^{n-1},  n=1..Nt
-    U^0 = U0 (UV境界条件、固定)
+    U^0 = U0 (UV boundary condition, fixed)
 
-    Aとdtがtに依らない(tree-only)ので、LHS行列は全ステップ共通。
-    LU分解を1回だけ行い、ブロック消去 (= このブロック双対角の大域系を
-    厳密に解くのと数学的に同値) で全ステップを解く。
+    Since A and dt do not depend on t (tree-only), the LHS matrix is the same for
+    all steps. Do one LU factorization, then solve all steps by block
+    elimination (mathematically equivalent to solving this block-bidiagonal
+    global system exactly).
     """
     N = len(rho) * len(sigma)
     A = build_spatial_operator(rho, sigma)
@@ -158,7 +165,7 @@ def solve_relaxation(rho, sigma, U0_flat, t0, t_end, n_t):
 
 
 def analytic_tree_solution(t_end, RHO, SIGMA, use_full_seed):
-    """特性曲線 rho(0)=rho(t_end)*exp(2*t_end) で厳密解を評価する。"""
+    """Evaluate the exact solution along the characteristics rho(0)=rho(t_end)*exp(2*t_end)."""
     scale = np.exp(2.0 * t_end)
     rho0 = RHO * scale
     sigma0 = SIGMA * scale
@@ -171,15 +178,15 @@ def analytic_tree_solution(t_end, RHO, SIGMA, use_full_seed):
 
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--n-rho", type=int, default=41, help="rho方向の格子点数")
-    p.add_argument("--n-sigma", type=int, default=41, help="sigma方向の格子点数")
-    p.add_argument("--n-t", type=int, default=100, help="時間方向のステップ数")
+    p.add_argument("--n-rho", type=int, default=41, help="number of grid points in rho")
+    p.add_argument("--n-sigma", type=int, default=41, help="number of grid points in sigma")
+    p.add_argument("--n-t", type=int, default=100, help="number of time steps")
     p.add_argument("--rho-max", type=float, default=1.75)
     p.add_argument("--sigma-max", type=float, default=1.75)
     p.add_argument("--t0", type=float, default=0.0)
     p.add_argument("--t-end", type=float, default=None)
     p.add_argument("--full-seed", action="store_true",
-                    help="tree多項式のみでなく、u_seed (tree+thermal) を初期条件に使う")
+                    help="use u_seed (tree+thermal) as the initial condition, not just the tree polynomial")
     p.add_argument("--out", type=str, default="results/relax_tree.npz")
     return p.parse_args()
 

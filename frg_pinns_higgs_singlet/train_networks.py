@@ -1,20 +1,22 @@
 # Usage:
-#   python train_networks.py rho   --epochs 10000                    # 全5 rhoブロック x 2 tブロック
-#   python train_networks.py rho   --epochs 10000 --rho-blocks 2-4    # rhoブロックの一部を学習/再開
-#   python train_networks.py sigma --epochs 10000 --sigma-blocks 0-2  # sigma版も同様
-#   python train_networks.py 2D    --epochs 10000                     # (irho,isigma)25セル x 2ブロック
-#                                                                      # 左/下隣接のみ境界連続性loss、
-#                                                                      # ./data_UV_2D/ に保存(--round省略時=1)
-#   python train_networks.py 2D --round 2 --epochs 5000               # 2周目: 完成済み1周目グリッドを
-#                                                                      # 各セルの初期値としてウォームスタート
-#                                                                      # しつつ、右/上隣接との境界連続性loss
-#                                                                      # も追加した平滑化パス。
-#                                                                      # 参照元(--src-dir)は既定 ./data_UV_2D、
-#                                                                      # 保存先(--out-dir)は既定
-#                                                                      # ./data_UV_2D_round2 (1周目は上書きしない)。
-#                                                                      # 1周目が全25セル分揃っていないと
-#                                                                      # ウォームスタートできないセルは
-#                                                                      # 警告付きでスキップされる。
+#   python train_networks.py rho   --epochs 10000                    # all 5 rho blocks x 2 t blocks
+#   python train_networks.py rho   --epochs 10000 --rho-blocks 2-4    # train/resume a subset of the rho blocks
+#   python train_networks.py sigma --epochs 10000 --sigma-blocks 0-2  # same for the sigma version
+#   python train_networks.py 2D    --epochs 10000                     # (irho,isigma) 25 cells x 2 blocks
+#                                                                      # interface-continuity loss with the
+#                                                                      # left/bottom neighbors only,
+#                                                                      # saved to ./data_UV_2D/ (=round 1 when --round omitted)
+#   python train_networks.py 2D --round 2 --epochs 5000               # round 2: a smoothing pass that
+#                                                                      # warm-starts each cell from the
+#                                                                      # completed round-1 grid, while also
+#                                                                      # adding interface-continuity loss with
+#                                                                      # the right/top neighbors.
+#                                                                      # the source (--src-dir) defaults to ./data_UV_2D,
+#                                                                      # the destination (--out-dir) defaults to
+#                                                                      # ./data_UV_2D_round2 (round 1 is not overwritten).
+#                                                                      # cells that cannot be warm-started because
+#                                                                      # round 1 is not complete for all 25 cells
+#                                                                      # are skipped with a warning.
 import argparse
 import singlet_UV_rho_2D as singlet_UV
 import singlet_UV_sigma as singlet_UV_sigma

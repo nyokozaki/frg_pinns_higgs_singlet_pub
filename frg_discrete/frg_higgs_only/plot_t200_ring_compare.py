@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-T_raw=200 GeV: full flow eq. (rloop+eta, Newton-Krylov) の2つの解
-(baseline / coupling-prior c_lower=0.5) を、
+T_raw=200 GeV: compare the two solutions of the full flow eq. (rloop+eta,
+Newton-Krylov) -- baseline and coupling-prior c_lower=0.5 -- against
 "tree level potential with running coupling + CW + one-loop thermal + ring summation"
-(Arnold-Espinosa完全版, cw_thermal.u_thermal_finiteT_ring) と比較する。
+the physical finite-temperature reference (full Arnold-Espinosa, cw_thermal.u_thermal_finiteT_ring).
 """
 
 import os
@@ -42,7 +42,7 @@ U_cw = U_cw + U_tree_rgerun
 
 U_ring = U_cw + cw_thermal.u_thermal_finiteT_ring(T_END, rho)
 
-# 原点で U=0 に揃える (relax_full側もU(rho_min)=0で出力されている)
+# align U=0 at the origin (relax_full also outputs with U(rho_min)=0)
 U_cw = U_cw - U_cw[0]
 U_ring = U_ring - U_ring[0]
 

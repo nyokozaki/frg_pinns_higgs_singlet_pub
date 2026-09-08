@@ -2,7 +2,7 @@
 
 import numpy as np
 
-# FRG / ポテンシャルの物理パラメータ
+# FRG / effective-potential physical parameters
 
 k_IR = 150.0 
 t = -2.0    # range of t from 0

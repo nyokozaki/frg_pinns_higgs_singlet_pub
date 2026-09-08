@@ -19,7 +19,7 @@ _GL_t_cpu, _GL_w_cpu = make_leggauss_constants(
     deg=_DEG,
     device="cpu",
     dtype=torch.float64,
-    copy=True,   # 安全側。共有メモリを避ける
+    copy=True,   # safe side; avoid shared memory
 )
 
 # ============================================================
@@ -170,7 +170,7 @@ def u_thermal_finiteT(t_phys, rho_phys, sigma_phys):
     need the physical (ring-resummed) potential must add get_u_ring() themselves;
     this bare 1-loop version is what loss_extensions.py's del_aH (-> F_H_target)
     is built from, deliberately, since a third rho-derivative of the ring piece
-    is non-analytic at rho=0 (paper Sec. 5.2).
+    is non-analytic at rho=0 (see CLAUDE.md).
 
     Included modes:
       - scalar: Goldstones + 2 scalar eigenmodes

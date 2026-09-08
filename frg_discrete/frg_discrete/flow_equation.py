@@ -1,42 +1,45 @@
 """
-Wetterich方程式 (LPA', 有限温度) の右辺を格子上で評価する。
+Evaluate the right-hand side of the Wetterich equation (LPA', finite T) on the grid.
 
-frg_pinns_higgs_singlet/FRG_residual.py の R_FRG_in を NumPy に移植したもの。
-PINN側は残差 R = rtree - rloop を損失として R=0 を学習させているが、
-ここでは同じ R=0 を u_t について解いた
+NumPy port of R_FRG_in from frg_pinns_higgs_singlet/FRG_residual.py. On the PINN
+side the residual R = rtree - rloop is trained to R=0 as a loss; here the same
+R=0, solved for u_t, i.e.
 
     du/dt = -4u + (2+eta_rho)*rho*u_rho + (2+eta_sigma)*sigma*u_sigma + rloop
 
-を method-of-lines の右辺 (RHS) として直接使う。
+is used directly as the method-of-lines right-hand side (RHS).
 
-FRG time の規約は running_couplings.py と同じ:
-  t_phys=0 が UV端、t_phys=t_range (負) が IR端。
+The FRG-time convention is the same as in running_couplings.py:
+  t_phys=0 is the UV edge, t_phys=t_range (negative) the IR edge.
 
 --------------------------------------------------------------------
-tree/残差分解 (flow_rhs_w) について
+On the tree/residual split (flow_rhs_w)
 --------------------------------------------------------------------
-u_tree_exact(t,rho,sigma) (質量項だけ a -> a*exp(-2t) とスケールし、
-quartic類 lamH,lamS,lamHS は固定) は、eta=0・rloop=0 の"自由"フロー
+u_tree_exact(t,rho,sigma) (only the mass terms scale as a -> a*exp(-2t); the
+quartics lamH,lamS,lamHS are fixed) is the exact solution of the "free" flow
+with eta=0, rloop=0,
 
     du/dt = -4u + 2*rho*u_rho + 2*sigma*u_sigma
 
-の厳密解になっている (u_tree自体がRG canonical scalingそのものだから)。
-そこで u = u_tree + w とおくと、w = u - u_tree が満たす方程式は
+(because u_tree is exactly the RG canonical scaling). Writing u = u_tree + w,
+the equation satisfied by w = u - u_tree is
 
     dw/dt = F_tree(t,rho,sigma) - 4w + (2+eta_rho)*rho*w_rho
-            + (2+eta_sigma)*sigma*w_sigma + rloop(u_tree+w由来の質量, t)
+            + (2+eta_sigma)*sigma*w_sigma + rloop(masses from u_tree+w, t)
 
     F_tree = eta_rho(t)*rho*u_tree_rho + eta_sigma(t)*sigma*u_tree_sigma
 
-になる (u_tree部分の "-4u_tree+2rho*u_tree_rho+2sigma*u_tree_sigma-du_tree/dt"
-は恒等的に0なので、残るのは eta 由来の項だけ)。eta_rho, eta_sigma は
-running couplingsから来るloop生成量なので、F_treeも本質的にはloop effect の
-一部であり、"tree" ではなく w 側 (残差) に属する。
+(the u_tree piece "-4u_tree+2rho*u_tree_rho+2sigma*u_tree_sigma-du_tree/dt"
+vanishes identically, so only the eta-generated terms remain). Since eta_rho,
+eta_sigma are loop-generated quantities coming from the running couplings,
+F_tree is essentially part of the loop effect too and belongs on the w
+(residual) side, not "tree".
 
-u_tree部分は解析的に厳密 (離散化誤差ゼロ) なので、-4u の正準スケーリング項が
-持つ指数的増幅 (積分区間 Delta t=2 で e^{4*2}=e^8 ~ 3000倍) にさらされるのは
-残差 w だけになり、w は tree よりずっと小さい (thermal補正程度) ため、
-数値誤差の増幅による影響を大幅に抑えられる。
+The u_tree piece is evaluated analytically and exactly (zero discretization
+error), so only the residual w is exposed to the exponential amplification of
+the -4u canonical-scaling term (over an integration range Delta t=2,
+e^{4*2}=e^8 ~ 3000x). Because w is much smaller than the tree part (of thermal-
+correction size), the impact of amplified numerical error is greatly reduced.
 """
 
 import numpy as np
@@ -80,7 +83,7 @@ def _inv_sqrt(m2, floor=EPS):
 
 
 def u_tree_derivs(t_phys, rho, sigma):
-    """u_tree_exact の (u_rho, u_sigma, u_rhorho, u_sigmasigma, u_rhosigma) を厳密に返す。"""
+    """Return the exact (u_rho, u_sigma, u_rhorho, u_sigmasigma, u_rhosigma) of u_tree_exact."""
     muH2_t = aH * np.exp(-2.0 * t_phys)
     muS2_t = aS * np.exp(-2.0 * t_phys)
     u_rho = muH2_t + 2.0 * lamH * rho + lamHS * sigma
@@ -94,28 +97,33 @@ def u_tree_derivs(t_phys, rho, sigma):
 def _rloop_from_derivs(t_phys, rho, sigma, u_rho, u_sigma, u_rhorho, u_sigmasigma, u_rhosigma,
                         warn_on_tachyon=False, disc_delta=0.0, disc_cut=0.0, mass_floor=0.0):
     """
-    質量固有値と熱閾値関数から rloop = kloop*loop_sum (clip済み) を計算する。
-    flow_rhs (フル u) / flow_rhs_w (残差 w、u_tree+w由来の合成微分を渡す) の共通部分。
+    Compute rloop = kloop*loop_sum (clipped) from the mass eigenvalues and
+    thermal threshold functions. Shared by flow_rhs (full u) and flow_rhs_w
+    (residual w, which passes the composite derivatives from u_tree+w).
 
-    disc_delta : Higgs/singlet質量固有値の判別式 disc=(M11-M22)^2+4*M12^2 に
-                 対する正則化パラメータ。disc_delta>0 のとき
-                 sqrt_disc = sqrt(disc + disc_delta**2) を使う (円錐型の
-                 特異点 disc=0 を半径~disc_deltaで滑らかに丸める。ただし
-                 disc=0近傍の微分は~1/disc_deltaのオーダーで残る)。
-    disc_cut : disc_delta と排他的な代替正則化。disc_cut>0 のとき
-               sqrt_disc = sqrt(max(disc, disc_cut**2)) というハードクリップを使う。
-               disc < disc_cut**2 の領域では sqrt_disc が定数になり、その領域内での
-               U に対する微分が厳密にゼロになる (JFNKの有限差分ヤコビアンが
-               この項からノイズを拾わなくなる、という狙い。ただし disc=disc_cut**2
-               の境界に微分不連続の折れ目が残る)。
-    デフォルト (disc_delta=disc_cut=0.0) は従来通り sqrt(clip(disc, EPS, None))
-    を使い、挙動を変えない (既存の呼び出し元との後方互換性のため)。
-    mass_floor : Higgs/singlet質量固有値 (mG2, m1_sq, m2_sq) の規格化質量二乗
-                 1+m^2 に対するハードクリップのfloor値。mass_floor>0 のとき
-                 _inv_sqrt と有限温度項のEの両方で clip(1+m^2, EPS, None) の
-                 代わりに clip(1+m^2, mass_floor, None) を使う。gauge/topは
-                 1+m^2>=1 で floor に触れないため無関係。デフォルト0.0は
-                 従来通りEPS floor。
+    disc_delta : regularization parameter for the discriminant
+                 disc=(M11-M22)^2+4*M12^2 of the Higgs/singlet mass eigenvalues.
+                 When disc_delta>0, sqrt_disc = sqrt(disc + disc_delta**2) is
+                 used, smoothly rounding the conical singularity at disc=0 with
+                 radius ~disc_delta (though the derivative near disc=0 still
+                 remains of order ~1/disc_delta).
+    disc_cut : an alternative regularization, mutually exclusive with disc_delta.
+               When disc_cut>0, a hard clip sqrt_disc = sqrt(max(disc, disc_cut**2))
+               is used. In the region disc < disc_cut**2, sqrt_disc is constant,
+               so its derivative with respect to U is exactly zero there (the aim
+               being that the finite-difference Jacobian of JFNK no longer picks
+               up noise from this term; but a kink in the derivative remains at
+               the boundary disc=disc_cut**2).
+    The default (disc_delta=disc_cut=0.0) uses the previous sqrt(clip(disc, EPS,
+    None)) and does not change behaviour (backward compatibility with existing
+    callers).
+    mass_floor : hard-clip floor for the normalized mass-squared 1+m^2 of the
+                 Higgs/singlet mass eigenvalues (mG2, m1_sq, m2_sq). When
+                 mass_floor>0, both _inv_sqrt and the E of the finite-temperature
+                 terms use clip(1+m^2, mass_floor, None) instead of
+                 clip(1+m^2, EPS, None). Gauge/top are unaffected since
+                 1+m^2>=1 never touches the floor. The default 0.0 keeps the
+                 previous EPS floor.
     """
     g1, g2, yt, _, _ = get_running_couplings(t_phys)
 
@@ -214,15 +222,17 @@ def _rloop_from_derivs(t_phys, rho, sigma, u_rho, u_sigma, u_rhorho, u_sigmasigm
 def flow_rhs(t_phys, U, grid, warn_on_tachyon=False, scheme="upwind", disc_delta=0.0, disc_cut=0.0,
              mass_floor=0.0):
     """
-    du/dt(t_phys, rho, sigma) を格子全体 (grid.shape の2次元配列) で返す (フル u を直接積分)。
+    Return du/dt(t_phys, rho, sigma) over the whole grid (a 2D array of
+    grid.shape); integrates the full u directly.
 
     U : ndarray, shape grid.shape
-        現在のRG time t_phys における無次元ポテンシャル u(rho, sigma)。
-    scheme : "upwind" (デフォルト、explicit時間積分に対して安定) か
-             "central" (高精度だが高解像度でexplicit積分が不安定になりうる)。
-             grid_fd.Grid2D.derivatives 参照。
-    disc_delta, disc_cut, mass_floor : _rloop_from_derivs 参照
-        (質量固有値判別式の正則化、互いに排他。mass_floorは独立に併用可)。
+        the dimensionless potential u(rho, sigma) at the current RG time t_phys.
+    scheme : "upwind" (default, stable for explicit time integration) or
+             "central" (higher accuracy but explicit integration can become
+             unstable at high resolution). See grid_fd.Grid2D.derivatives.
+    disc_delta, disc_cut, mass_floor : see _rloop_from_derivs
+        (regularization of the mass-eigenvalue discriminant; disc_delta and
+        disc_cut are mutually exclusive, mass_floor can be combined with either).
     """
     u_rho, u_sigma, u_rhorho, u_sigmasigma, u_rhosigma = grid.derivatives(U, scheme=scheme)
 
@@ -250,12 +260,13 @@ def flow_rhs(t_phys, U, grid, warn_on_tachyon=False, scheme="upwind", disc_delta
 
 def flow_rhs_w(t_phys, W, grid, warn_on_tachyon=False, scheme="upwind"):
     """
-    u = u_tree_exact(t,rho,sigma) + w とおいたときの dw/dt を返す。
+    Return dw/dt for u = u_tree_exact(t,rho,sigma) + w.
 
-    tree部分の "-4u_tree+2rho*u_tree_rho+2sigma*u_tree_sigma-du_tree/dt" は
-    恒等的に0なので (u_tree自身がeta=0・rloop=0の自由フローの厳密解のため)、
-    残る強制項は eta 由来の F_tree だけになる。u_tree部分は解析的に厳密
-    (離散化誤差なし) に評価され、格子上の有限差分は w にしか使わない。
+    The tree piece "-4u_tree+2rho*u_tree_rho+2sigma*u_tree_sigma-du_tree/dt"
+    vanishes identically (u_tree itself is the exact solution of the free flow
+    with eta=0, rloop=0), so the only remaining forcing term is the
+    eta-generated F_tree. The u_tree piece is evaluated analytically and exactly
+    (no discretization error); the grid finite differences are applied only to w.
     """
     w_rho, w_sigma, w_rhorho, w_sigmasigma, w_rhosigma = grid.derivatives(W, scheme=scheme)
 

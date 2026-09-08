@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """
-case_a_tree_slices_cw_thermal.png (T_raw=100 GeVデフォルト) を T_raw=200 GeV で再現する。
+Reproduce case_a_tree_slices_cw_thermal.png (default T_raw=100 GeV) at T_raw=200 GeV.
 
-- numerical (relax_tree) / tree / RGE-run tree+CW: tree構造のみに依存し
-  T_rawに依存しないので、既存の results/case_a.npz (relax_tree.py, 41x41, Nt=100,
-  tree-onlyのseed) をそのまま再利用する。
-- RGE-run tree+CW+thermal: cw_thermal.set_T_raw(200) で T_raw を上書きしてから
-  u_thermal_finiteT を再評価する。
-- full flow eq. (rloop+eta) baseline / +coupling prior: 既存の
+- numerical (relax_tree) / tree / RGE-run tree+CW: depend only on the tree
+  structure and not on T_raw, so the existing results/case_a.npz (relax_tree.py,
+  41x41, Nt=100, tree-only seed) is reused as-is.
+- RGE-run tree+CW+thermal: overwrite T_raw with cw_thermal.set_T_raw(200), then
+  re-evaluate u_thermal_finiteT.
+- full flow eq. (rloop+eta) baseline / +coupling prior: use the existing
   results/full_n21_Traw200_baseline.npz / full_n21_Traw200_prior.npz
-  (T_raw=200, n_rho=n_sigma=21, n_t=40, disc_cut=0) を使う。
-- full flow eq., central4 (+coupling prior): T=100版と同じ disc_cut=1e-2 に揃えて
-  T_raw=200 で新規に実行した
-  results/full_n21_Traw200_central4_disccut1e-2(_prior015_006).npz を使う。
+  results (T_raw=200, n_rho=n_sigma=21, n_t=40, disc_cut=0).
+- full flow eq., central4 (+coupling prior): use
+  results/full_n21_Traw200_central4_disccut1e-2(_prior015_006).npz, run anew at
+  T_raw=200 with the same disc_cut=1e-2 as the T=100 version.
 
-見やすさ優先 (白背景のまま文字・線を太く大きく)。
+Readability first (keep the white background; make text and lines thick and large).
 """
 
 import os
@@ -75,7 +75,7 @@ U_tree_rgerun = cw_thermal.u_tree_rgerun(T_END, RHO_F, SIGMA_F)
 U_cw = U_cw + U_tree_rgerun
 U_cw_thermal = U_cw_thermal + U_tree_rgerun
 
-# 原点 (rho=sigma=0) で U=0 に揃える (元図の "shifted so U(origin)=0" と同じ規約)
+# align U=0 at the origin (rho=sigma=0), the same "shifted so U(origin)=0" convention as the original figure
 i0_f = int(np.argmin(np.abs(rho_f)))
 U_cw = U_cw - U_cw[i0_f, i0_f]
 U_cw_thermal = U_cw_thermal - U_cw_thermal[i0_f, i0_f]

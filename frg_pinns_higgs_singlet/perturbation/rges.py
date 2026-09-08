@@ -5,25 +5,26 @@ import numpy as np
 import torch
 from scipy.integrate import solve_ivp
 
-# config_params から必要なパラメータをすべてインポート
+# import all needed parameters from config_params
 from .gauge_one_loop import gauge_couplings_1loop
 from .config_params import lamH, lamS, lamHS, mhsq, mssq, vew
 
 PARAM_ORDER = ["g1", "g2", "g3", "yt", "lam", "lamS", "lamHS", "mhsq", "mssq"]
 
-# 計算用の微小値と定数
+# small values and constants used in the computation
 eps = 1e-10
-NGS = 3.0  # Goldstoneボソンの自由度
+NGS = 3.0  # Goldstone boson degrees of freedom
 C = 1.0
 
 # ==========================================
-# 1. 質量行列とCWポテンシャルの定義 (PyTorch)
+# 1. Definition of the mass matrix and the CW potential (PyTorch)
 # ==========================================
 
 def scalar_masses_bare(rho_phys, sigma_phys, params, kt):
     """
-    スカラー場の裸の質量を計算します。
-    入力の rho_phys, sigma_phys はスケール kt で無次元化された値 (rho/k^2) を想定。
+    Compute the bare scalar-field masses.
+    rho_phys, sigma_phys are expected to be nondimensionalized by the scale kt
+    (rho/k^2).
     """
     lamH_t = params['lamH']
     lamS_t = params['lamS']
@@ -56,7 +57,7 @@ def scalar_masses_bare(rho_phys, sigma_phys, params, kt):
 
 def gauge_masses_bare(rho_phys, params):
     """
-    ゲージボソンの裸の質量を計算します。
+    Compute the bare gauge-boson masses.
     """
     g1 = params['g1']
     g2 = params['g2']
@@ -69,7 +70,7 @@ def gauge_masses_bare(rho_phys, params):
 
 def u_CW_zeroT(rho_phys, sigma_phys, params, kt):
     """
-    T=0 における 1-loop Coleman-Weinberg ポテンシャル (無次元)。
+    1-loop Coleman-Weinberg potential at T=0 (dimensionless).
     """
     mG2_b, m1_sq_b, m2_sq_b = scalar_masses_bare(rho_phys, sigma_phys, params, kt)
     mW_T2, mZ_T2, mA_T2 = gauge_masses_bare(rho_phys, params)
@@ -104,34 +105,35 @@ def u_CW_zeroT(rho_phys, sigma_phys, params, kt):
     return cw_1 + cw_2 + cw_W + cw_Z + cw_top
 
 # ==========================================
-# 2. CW補正の抽出 (Autogradによる自動微分)
+# 2. Extraction of the CW corrections (automatic differentiation via autograd)
 # ==========================================
 
 def calculate_cw_corrections(params, kt):
     """
-    CWポテンシャルの微分を計算し、各パラメータへの補正値を返します。
+    Compute the derivatives of the CW potential and return the correction to
+    each parameter.
     """
     rho_dimful = vew**2
-    sigma_dimful = 0.0  # Singlet側のVEVは0と仮定
+    sigma_dimful = 0.0  # assume the singlet-side VEV is 0
 
-    # 無次元化してPyTorchテンソル化 (勾配計算を有効にする)
+    # nondimensionalize and make PyTorch tensors (enable gradient tracking)
     rho_tilde = torch.tensor(rho_dimful / (kt**2), requires_grad=True, dtype=torch.float64)
     sigma_tilde = torch.tensor(sigma_dimful / (kt**2), requires_grad=True, dtype=torch.float64)
 
-    # 無次元CWポテンシャル
+    # dimensionless CW potential
     u_cw = u_CW_zeroT(rho_tilde, sigma_tilde, params, kt)
 
-    # 1次微分 (mu_H^2, mu_S^2 への寄与)
+    # first derivatives (contributions to mu_H^2, mu_S^2)
     grads = torch.autograd.grad(u_cw, (rho_tilde, sigma_tilde), create_graph=True)
     du_drho = grads[0]
     du_dsigma = grads[1]
 
-    # 2次微分 (lamH, lamS, lamHS への寄与)
+    # second derivatives (contributions to lamH, lamS, lamHS)
     d2u_drho2 = torch.autograd.grad(du_drho, rho_tilde, retain_graph=True)[0]
     d2u_dsigma2 = torch.autograd.grad(du_dsigma, sigma_tilde, retain_graph=True)[0]
     d2u_drhodsigma = torch.autograd.grad(du_drho, sigma_tilde, retain_graph=True)[0]
 
-    # 次元を復元して物理補正値へ変換 (V_cw = k^4 * u_cw, rho = k^2 * rho_tilde)
+    # restore dimensions and convert to physical corrections (V_cw = k^4 * u_cw, rho = k^2 * rho_tilde)
     delta_mhsq = (kt**2) * du_drho.item()
     delta_mssq = (kt**2) * du_dsigma.item()
     delta_lamH = 0.5 * d2u_drho2.item()
@@ -141,27 +143,28 @@ def calculate_cw_corrections(params, kt):
     return delta_mhsq, delta_mssq, delta_lamH, delta_lamS, delta_lamHS
 
 # ==========================================
-# 3. 初期化とRGEの実行 (NumPy/SciPy)
+# 3. Initialization and running the RGEs (NumPy/SciPy)
 # ==========================================
 
 def default_init(mu0=150.0, yt=0.9):
     """
-    【修正】 引数から lamS_val などを排除し、config_params のインポート値を直接使用
+    Uses the imported values from config_params directly, rather than taking
+    lamS_val etc. as arguments.
     """
     gy_, g2_, g3_ = gauge_couplings_1loop(mu0)
     
-    # config_params から読み込んだ物理パラメータをセット
+    # set the physical parameters read from config_params
     params_tree = {
         'g1': gy_, 'g2': g2_, 'g3': g3_, 'yt': yt,
         'lamH': lamH, 'lamS': lamS, 'lamHS': lamHS,
         'mhsq': mhsq, 'mssq': mssq
     }
 
-    # CW補正量の算出
+    # compute the CW corrections
     d_mhsq, d_mssq, d_lam, d_lamS, d_lamHS = calculate_cw_corrections(params_tree, mu0)
 
-    # 有効ポテンシャルにおいて物理的観測量に合わせるため、
-    # 裸のパラメータ(初期値)からCW寄与分を引き去ります。
+    # subtract the CW contribution from the bare (initial) parameters so that
+    # the effective potential matches the physical observables.
     lam_mod   = lamH - d_lam
     lamS_mod  = lamS - d_lamS
     lamHS_mod = lamHS - d_lamHS
@@ -188,7 +191,7 @@ def default_init(mu0=150.0, yt=0.9):
 def beta_functions(t, y):
     g1, g2, g3, yt, lam, lamS_val, lamHS_val, mhsq_val, mssq_val = y
 
-    # --- よく使うべき乗の事前計算 ---
+    # --- precompute frequently used powers ---
     g1sq, g2sq, g3sq = g1**2, g2**2, g3**2
     yt2 = yt**2
     yt4 = yt2**2
@@ -389,7 +392,7 @@ def default_init(mu0=150.0, yt=0.9, lam=0.13, lamS_val=1.0, lamHS_val=0.5):
 def beta_functions(t, y):
     g1, g2, g3, yt, lam, lamS_val, lamHS_val, mhsq_val, mssq_val = y
 
-    # --- よく使うべき乗の事前計算 ---
+    # --- precompute frequently used powers ---
     g1sq = g1**2
     g2sq = g2**2
     g3sq = g3**2
@@ -678,7 +681,7 @@ def make_running_couplings(mu0=150.0, mu_end=2000.0, init=None,
         "vec_mu": vec_mu,
     }
 
-    # PARAM_ORDER に追加した mhsq, mssq も自動的に callable として生成されます
+    # the mhsq, mssq added to PARAM_ORDER are also generated as callables automatically
     for i, name in enumerate(PARAM_ORDER):
         rc[name] = lambda t, i=i: vec(t)[i]
         rc[f"{name}_mu"] = lambda mu, i=i: vec_mu(mu)[i]

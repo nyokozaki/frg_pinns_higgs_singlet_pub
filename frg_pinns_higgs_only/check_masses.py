@@ -1,35 +1,35 @@
 import numpy as np
 
-# 必要な関数をモジュールから呼び出す
-# ※ get_running_couplings 等はチェック自体には不要なため除外しています
+# call the needed functions from the module
+# note: get_running_couplings etc. are excluded since they are not needed for the check itself
 from thermal_np import scalar_masses_AE
 
 def check_mass_positivity(t_min=-2.0, t_max=0.0, num_t=50,
                           rho_min=0.0, rho_max=2.0, num_rho=100):
     """
-    指定した t の範囲内で 1 + mH^2 (Higgs質量) が負にならないかをチェックする関数。
+    Function that checks whether 1 + mH^2 (Higgs mass) stays non-negative over the given range of t.
 
     Parameters:
     -----------
     t_min, t_max : float
-        t の探索範囲 (デフォルト: -2.0 から 0.0)
+        search range in t (default: -2.0 to 0.0)
     num_t : int
-        t の分割数 (精度を上げたい場合は増やす)
+        number of t subdivisions (increase for higher precision)
     rho_min, rho_max, num_rho : float, float, int
-        rho のグリッド設定
+        rho grid settings
 
     Returns:
     --------
     dict
-        - 'is_all_positive': すべてのグリッド・t で 1 + mH^2 >= 0 なら True
-        - 'global_min': 探索範囲全体での 1 + mH^2 の最小値
-        - 'negative_points': 負になった場合の t とその時の最小値のリスト
+        - 'is_all_positive': True if 1 + mH^2 >= 0 at every grid point and t
+        - 'global_min': the minimum of 1 + mH^2 over the whole search range
+        - 'negative_points': list of t values where it went negative and the corresponding minimum
     """
 
-    # rho のグリッド作成 (tに依存しないためループ外で作成して使い回す)
+    # build the rho grid (t-independent, so build once outside the loop and reuse)
     rho_vals = np.linspace(rho_min, rho_max, num_rho).reshape(1, -1)
 
-    # t の配列
+    # array of t
     t_vals = np.linspace(t_min, t_max, num_t)
 
     global_min = np.inf
@@ -38,16 +38,16 @@ def check_mass_positivity(t_min=-2.0, t_max=0.0, num_t=50,
     for t in t_vals:
         T_VAL = np.full_like(rho_vals, t)
 
-        # 質量固有値の計算
+        # compute the mass eigenvalues
         (mG2, mH2), _ = scalar_masses_AE(rho_vals, T_VAL)
 
-        # 1 + mH2 の最小値を計算
+        # compute the minimum of 1 + mH2
         current_min = np.min(1.0 + mH2)
 
         if current_min < global_min:
             global_min = current_min
 
-        # 負になった場合、該当する t とその時の最小値を記録
+        # if it went negative, record the t and the corresponding minimum
         if current_min < 0:
             negative_points.append({'t': t, 'min_val': current_min})
 
@@ -61,12 +61,12 @@ def check_mass_positivity(t_min=-2.0, t_max=0.0, num_t=50,
 
 
 # ============================================================
-# モジュールとしてインポートされた時ではなく、直接実行された場合のテスト用コード
+# test code for when run directly, not when imported as a module
 # ============================================================
 if __name__ == "__main__":
     print("Starting positivity check for 1 + m^2 in t = [-2.0, 0.0]...")
 
-    # 関数の実行 (分割数を変えたい場合は num_t, num_rho を調整してください)
+    # run the function (adjust num_t, num_rho to change the subdivisions)
     results = check_mass_positivity(
         t_min=-2.0, t_max=0.0, num_t=100,
         rho_min=0.0, rho_max=2.0, num_rho=100,
@@ -74,11 +74,11 @@ if __name__ == "__main__":
 
     print("-" * 50)
     if results['is_all_positive']:
-        print(f"✅ 問題ありません。すべての t において 1 + m^2 >= 0 です。")
-        print(f"   (探索範囲内での全体最小値: {results['global_min']:.6f})")
+        print(f"OK. 1 + m^2 >= 0 for all t.")
+        print(f"   (global minimum over the search range: {results['global_min']:.6f})")
     else:
-        print(f"⚠️ 警告: 1 + m^2 が負になる領域が見つかりました。")
-        print(f"   (探索範囲内での全体最小値: {results['global_min']:.6f})")
-        print("【負になった t の値とその最小値】:")
+        print(f"WARNING: found a region where 1 + m^2 becomes negative.")
+        print(f"   (global minimum over the search range: {results['global_min']:.6f})")
+        print("[t values where it went negative and their minima]:")
         for pt in results['negative_points']:
             print(f"  t = {pt['t']:>7.4f}  |  min(1+m^2) = {pt['min_val']:.6f}")

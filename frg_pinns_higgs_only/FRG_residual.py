@@ -34,7 +34,7 @@ def R_FRG_in(model, t_in, rho_in, loop=1.0, epoch_ratio=0.0):
 
     u, u_rho, u_rhorho = model(t_in, rho_in)
 
-    # 時間微分だけは autograd を使用
+    # autograd is used only for the time derivative
     u_tin = autograd.grad(
         u, t_in,
         grad_outputs=torch.ones_like(u),

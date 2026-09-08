@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """
-Higgs-only (1次元 rho) 版の縮約結果を可視化する。
+Visualize the reduced results of the Higgs-only (1D rho) version.
 
 - tree (UV-matched quartics, canonical scaling)
 - RGE-run tree + CW (T=0)
 - RGE-run tree + CW + thermal (T_raw=100 GeV)
-- numerical (relax_tree, tree-only リラクゼーション)
-- full flow eq. (rloop+eta, relax_full.py の Newton-Krylov解)
+- numerical (relax_tree, tree-only relaxation)
+- full flow eq. (rloop+eta, the Newton-Krylov solution of relax_full.py)
 
-singlet版 (frg_discrete4_main) の disc->0 分岐点非平滑性がここでは構造的に
-存在しないため、full flow eq. が f_tol まで収束することを示すのが主眼。
+The main point is to show that the full flow eq. converges to f_tol, since the
+disc->0 branch-point non-smoothness of the singlet version (frg_discrete4_main)
+is structurally absent here.
 """
 
 import os
@@ -39,15 +40,16 @@ final_res = float(full["final_residual_norm"])
 U_tree_a = u_tree_exact(T_END, rho_a)
 
 U_cw = cw_thermal.u_CW_zeroT(T_END, rho_f)
-# ring/daisy (Arnold-Espinosa) 補正込みを物理的参照として使う。1-loopのみ
-# (u_thermal_finiteT) 比で全rhoにわたって一律-13〜-15%ほど下がる(cw_thermal.py
-# 参照) — 定性的な形は変わらないが無視できる大きさではないため、こちらを採用。
+# use the version including the ring/daisy (Arnold-Espinosa) correction as the
+# physical reference. Relative to one-loop only (u_thermal_finiteT) it is lower
+# by a roughly uniform -13 to -15% across all rho (see cw_thermal.py) -- the
+# qualitative shape is unchanged but the size is not negligible, so this is adopted.
 U_cw_thermal = U_cw + cw_thermal.u_thermal_finiteT_ring(T_END, rho_f)
 U_tree_rgerun = cw_thermal.u_tree_rgerun(T_END, rho_f)
 U_cw = U_cw + U_tree_rgerun
 U_cw_thermal = U_cw_thermal + U_tree_rgerun
 
-# 原点 (rho=rho_min) で U=0 に揃える
+# align U=0 at the origin (rho=rho_min)
 U_cw = U_cw - U_cw[0]
 U_cw_thermal = U_cw_thermal - U_cw_thermal[0]
 

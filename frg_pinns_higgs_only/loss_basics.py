@@ -17,14 +17,14 @@ device = hp.device
 def loss_consistency(model, t_in, rho_in):
     u, ur, urr = model(t_in, rho_in)
 
-    # 1階微分の整合性
+    # consistency of the first derivatives
     u_rho_in = autograd.grad(u, rho_in, grad_outputs=torch.ones_like(u), create_graph=True, retain_graph=True)[0]
 
     u_rho_autograd = model.A_RHO * u_rho_in
 
     loss_1st = torch.mean((u_rho_autograd - ur)**2)
 
-    # 2階微分の整合性 (ur をさらに autograd で1回だけ微分)
+    # consistency of the second derivatives (differentiate ur once more with autograd)
     ur_rho_in = autograd.grad(ur, rho_in, grad_outputs=torch.ones_like(ur), create_graph=True, retain_graph=True)[0]
 
     urr_autograd = model.A_RHO * ur_rho_in
@@ -50,7 +50,7 @@ def loss_bc0(model, n_bc):
         .requires_grad_(True)
     )
 
-    # モデルから直接予測された1階・2階微分をすべて取得
+    # get all first/second derivatives predicted directly by the model
     u, du_drho, urr = model(t_in, rho_in)
 
     t_phys = model.unscale_t(t_in)
@@ -61,7 +61,7 @@ def loss_bc0(model, n_bc):
         print("loss_bc0 (finite T) imposed at physical t =", t_phys[0, 0].item())
         myflag = 1.0
 
-    # シード（ターゲット） potential の計算
+    # compute the seed (target) potential
     rho_phys_req = rho_phys.detach().clone().requires_grad_(True)
     t_phys_fixed = t_phys.detach().clone()
 
@@ -78,7 +78,7 @@ def loss_bc0(model, n_bc):
                       +u_CW_zeroT(t_phys_fixed, rho_phys_req)*uv_cw
                       )
 
-    # --- ターゲットの1階微分を計算 ---
+    # --- compute the first derivatives of the target ---
     (du_seed_drho,) = torch.autograd.grad(
         u_seed_req,
         (rho_phys_req,),
@@ -87,7 +87,7 @@ def loss_bc0(model, n_bc):
         retain_graph=True,
     )
 
-    # 1階微分のロス
+    # loss of the first derivatives
     loss_rho = ((du_seed_drho.detach() - du_drho) ** 2).mean()
 
     return loss_rho
@@ -134,7 +134,7 @@ def loss_pde(model, n_res, loop=1.0, epoch_ratio=0.0):
     R = R_FRG_in(model, t_in, rho_in, loop, epoch_ratio)
     L_pde_val = torch.mean(R**2)
 
-    # [追加] PDEの評価点において一貫性ロス(Consistency loss)も同時に計算する
+    # also compute the consistency loss at the PDE evaluation points
     L_consist_val = loss_consistency(model, t_in, rho_in)
 
     return L_pde_val, L_consist_val

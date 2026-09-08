@@ -63,7 +63,7 @@ def train_one_block_joint(
     w_bc=1.0,
     w_overlap=1.0,
     w_weak=1.0,       
-    w_consist=1.0,  # [追加] Consistency Lossの重み
+    w_consist=1.0,  # weight of the consistency loss
     w_sign=1000.0,
     save_name_model="model.pt",
     save_name_hist="history.npy",
@@ -103,7 +103,7 @@ def train_one_block_joint(
     for nt in range(N_t + 1):
         for nr in range(N_r + 1):
             for ns in range(N_s + 1):
-                # (0,0,0) を入れるかどうかは好み
+                # whether to include (0,0,0) is a matter of taste
                 if (nt, nr, ns) != (0, 0, 0):
                     vpinn_configs.append((nt, nr, ns))
 
@@ -247,7 +247,7 @@ def train_one_block_joint(
     
     #hp.w_sign = 1.0
 
-    # 規定エポック終了時点の lr を固定
+    # freeze the lr at the value it had when the scheduled epochs finished
     final_lr = optimizer.param_groups[0]["lr"]
     for g in optimizer.param_groups:
         g["lr"] = final_lr
@@ -270,7 +270,7 @@ def train_one_block_joint(
             print(f"  Extra block {iblock+1} / {max_extra_blocks}")
 
             for i in range(extra_block_size):
-                # epoch 比率はログ用途だけ
+                # the epoch ratio is for logging only
                 _epoch_ratio = (n_epochs + iblock * extra_block_size + i) / (
                     n_epochs + max_extra_blocks * extra_block_size
                 )
@@ -278,12 +278,12 @@ def train_one_block_joint(
                 model.train()
                 optimizer.zero_grad()
 
-                lr = optimizer.param_groups[0]["lr"]  # 固定だがログには出す
+                lr = optimizer.param_groups[0]["lr"]  # fixed, but still logged
 
                 loss, L_pde, L_consist, L_bc, L_overlap, L_sign, L_mag, L_weak = compute_losses()
                 loss.backward()
                 optimizer.step()
-                # scheduler.step() は呼ばない
+                # do not call scheduler.step()
 
                 history.append([
                     loss.item(),
@@ -296,7 +296,7 @@ def train_one_block_joint(
                     L_weak.item()
                 ])
 
-            # ブロックを100ステップ回し切ったあとで評価
+            # evaluate after running the block for the full 100 steps
             if hp.w_sign == 0:
                 loss_sm = L_mag.item()
             else:
@@ -493,7 +493,7 @@ def train_sigma_window_joint(
     return all_hist_local, trained_models
 
 # ============================================================
-# main loop (分割実行対応版)
+# main loop (supports split execution)
 # ============================================================
 def train(n_epochs=1000, sigma_blocks=None):
     all_hist = {}
@@ -507,13 +507,13 @@ def train(n_epochs=1000, sigma_blocks=None):
 
     os.makedirs("./data_sigma", exist_ok=True)
 
-    # 指定がない場合は全ブロックを実行 [0, 1, 2, 3, 4]
+    # run all blocks [0, 1, 2, 3, 4] if none specified
     if sigma_blocks is None:
         sigma_blocks = list(range(n_sigma_blocks))
 
     prev_block_models = [None, None]
 
-    # --- [追加] 途中からスタートする場合、直前(isigma - 1)のモデルをロードする ---
+    # --- when starting partway through, load the previous (isigma - 1) model ---
     first_sigma = sigma_blocks[0]
     if first_sigma > 0:
         prev_sigma = first_sigma - 1
@@ -523,7 +523,7 @@ def train(n_epochs=1000, sigma_blocks=None):
         else:
             prev_sigma_end = (prev_sigma + 1) * d_sigma
 
-        print(f"--- 途中再開: sigma block {prev_sigma} の学習済みモデルをロードします ---")
+        print(f"--- resuming partway: loading the trained model of sigma block {prev_sigma} ---")
         t_blocks = [(-1.0, 0.0), (-2.0, -1.0)]
         for iblock, (t0, t1) in enumerate(t_blocks, start=1):
             file_model = f"./data_sigma/model_higgs_singlet_u_sigma{prev_sigma}_block{iblock}.pt"
@@ -535,15 +535,15 @@ def train(n_epochs=1000, sigma_blocks=None):
                     rho0=0.0, rho1=0.350,
                     sigma0=prev_sigma_start, sigma1=prev_sigma_end
                 )
-                print("--- ロード完了 ---")
+                print("--- load complete ---")
             else:
-                print(f"前ブロックのモデルが見つかりません。isigma={prev_sigma}はまだ学習されていません: {file_model}")       
+                print(f"previous block model not found. isigma={prev_sigma} has not been trained yet: {file_model}")       
     # -------------------------------------------------------------------------
 
     for isigma in sigma_blocks:
-        # 指定された範囲外のブロック番号が渡された場合の安全策
+        # safeguard for when a block index outside the specified range is passed
         if isigma >= n_sigma_blocks:
-            print(f"Warning: isigma={isigma} は最大ブロック数({n_sigma_blocks})を超えています。スキップします。")
+            print(f"Warning: isigma={isigma} exceeds the maximum number of blocks ({n_sigma_blocks}). Skipping.")
             continue
 
         sigma_start = isigma * d_sigma
@@ -578,7 +578,7 @@ def train(n_epochs=1000, sigma_blocks=None):
 
         all_hist[isigma] = hist_list
 
-        # 次のループ(右隣のブロック)のためにモデルを更新
+        # update the model for the next loop (the right-neighbor block)
         prev_block_models = trained_models
 
     return all_hist

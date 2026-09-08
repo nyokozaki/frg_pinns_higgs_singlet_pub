@@ -1,24 +1,25 @@
 #!/usr/bin/env python3
 """
-relax_full.py の w残差版。
+The w-residual version of relax_full.py.
 
-u(t,rho,sigma) = u_tree_exact(t,rho,sigma) + w(t,rho,sigma) とおき、
-Newtonの自由変数を u ではなく w にする。u_tree_exact は自由フロー
-(rloop=0, eta=0) の厳密解 (離散化誤差ゼロ) なので、この分解によって
-w が満たす式 (flow_equation.flow_rhs_w) には "-4u+2rho u_rho+2sigma u_sigma"
-の正準スケーリング (UV->IRでe^{4*2}~3000倍のダイナミックレンジ) が
-u_tree側で厳密にキャンセルされ、wだけを離散化すればよくなる。
+Write u(t,rho,sigma) = u_tree_exact(t,rho,sigma) + w(t,rho,sigma) and make the
+Newton free variable w rather than u. Since u_tree_exact is the exact solution
+of the free flow (rloop=0, eta=0) with zero discretization error, this split
+means the equation satisfied by w (flow_equation.flow_rhs_w) has the canonical
+scaling "-4u+2rho u_rho+2sigma u_sigma" (a dynamic range of e^{4*2}~3000x from
+UV to IR) cancelled exactly on the u_tree side, so only w has to be discretized.
 
-w は eta補正+rloop (loop/熱補正) 由来の "残差" なので、u_tree自体より
-小さいことが期待される (Tが大きいほどこの近似は弱まる -- 熱補正が
-tree に対して相対的に大きくなるため。詳細は relax_full.py と同じ
-grid/warm-start/継続法の枠組みを流用しつつ、比較実験用に別スクリプトとした)。
+Since w is the "residual" coming from the eta correction + rloop (loop/thermal
+corrections), it is expected to be smaller than u_tree itself (the larger T, the
+weaker this approximation -- the thermal correction grows relative to the tree).
+It reuses the same grid/warm-start/continuation framework as relax_full.py but
+is a separate script for comparison experiments.
 
-境界条件: w(t=0) = u_thermal_finiteT(t=0,...) (u_seed = u_tree_exact +
-u_thermal_finiteT なので、u_tree_exact(t=0)を引いた残りがそのまま
-w(t=0)になる)。
+Boundary condition: w(t=0) = u_thermal_finiteT(t=0,...) (since
+u_seed = u_tree_exact + u_thermal_finiteT, subtracting u_tree_exact(t=0) leaves
+exactly w(t=0)).
 
-使い方:
+Usage:
     python relax_full_w.py --n-rho 21 --n-sigma 21 --n-t 40
 """
 
@@ -59,7 +60,7 @@ def parse_args():
     p.add_argument("--method", type=str, default="lgmres")
     p.add_argument("--scheme", type=str, default="cn", choices=["cn", "be"])
     p.add_argument("--warm-start", type=str, default=None,
-                   help="前回の relax_full_w.py 出力npz (W_all_raw) を初期推定値として使う。")
+                   help="use a previous relax_full_w.py output npz (W_all_raw) as the initial guess.")
     p.add_argument("--out", type=str, default="results/relax_full_w.npz")
     return p.parse_args()
 

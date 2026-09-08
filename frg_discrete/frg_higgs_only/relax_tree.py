@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """
-tree-only (rloop=eta=0) の自由フローを、リラクゼーション法 (space x time を
-まとめて離散化し、1つの大域的な連立方程式として解く) で解く (Higgs-only,
-1次元 rho 版)。
+Solve the tree-only (rloop=eta=0) free flow with a relaxation method
+(discretize space x time together and solve one global system) -- the
+Higgs-only, 1D rho version.
 
-方程式: du/dt = -4u + 2*rho*u_rho  (t: 0 -> t_range, t_range<0)
+Equation: du/dt = -4u + 2*rho*u_rho  (t: 0 -> t_range, t_range<0)
 
-線形PDEなので、Newton反復は不要 (1回の線形ソルブで厳密に収束する)。
-空間微分は中心差分、時間積分は Crank-Nicolson で離散化し、全時刻ステップを
-まとめた1つのブロック双対角線形系として解く。
+A linear PDE, so no Newton iteration is needed (one linear solve converges
+exactly). Space derivatives use a central difference, time integration uses
+Crank-Nicolson, and all time steps are solved as one block-bidiagonal linear
+system.
 
-使い方:
+Usage:
     python relax_tree.py --n-rho 41 --n-t 100
 """
 
@@ -37,7 +38,7 @@ def _fd_first_deriv_coeffs(offsets):
 
 
 def build_D1_central(n, h, order=2):
-    """1階微分の疎行列を返す (frg_discrete/grid_fd.py Grid2D._first_deriv_1d と同じステンシル)。"""
+    """Return the sparse first-derivative matrix (same stencil as frg_discrete/grid_fd.py Grid2D._first_deriv_1d)."""
     rows, cols, vals = [], [], []
 
     def add(i, j, v):
@@ -56,7 +57,7 @@ def build_D1_central(n, h, order=2):
         add(n - 1, n - 1, 3.0 / (2 * h)); add(n - 1, n - 2, -4.0 / (2 * h)); add(n - 1, n - 3, 1.0 / (2 * h))
     elif order == 4:
         if n < 5:
-            raise ValueError("order=4 には5点以上の格子が必要です")
+            raise ValueError("order=4 requires at least 5 grid points")
         add_stencil(0, [0, 1, 2, 3, 4])
         add_stencil(1, [-1, 0, 1, 2, 3])
         for i in range(2, n - 2):
@@ -70,7 +71,7 @@ def build_D1_central(n, h, order=2):
 
 
 def build_spatial_operator(rho, order=2):
-    """A = -4*I + 2*rho*d/drho を n_rho x n_rho の疎行列として構築する。"""
+    """Build A = -4*I + 2*rho*d/drho as an n_rho x n_rho sparse matrix."""
     n_rho = len(rho)
     drho = rho[1] - rho[0]
 
@@ -83,14 +84,15 @@ def build_spatial_operator(rho, order=2):
 
 def solve_relaxation(rho, U0, t0, t_end, n_t):
     """
-    リラクゼーション法: t方向にNt+1点、Crank-Nicolsonで離散化した
-    ブロック双対角の大域線形系を解く。
+    Relaxation method: discretize the t direction into Nt+1 points with
+    Crank-Nicolson and solve the block-bidiagonal global linear system.
 
     (I - 0.5*dt*A) U^n = (I + 0.5*dt*A) U^{n-1},  n=1..Nt
-    U^0 = U0 (UV境界条件、固定)
+    U^0 = U0 (UV boundary condition, fixed)
 
-    Aとdtがtに依らない(tree-only)ので、LHS行列は全ステップ共通。
-    LU分解を1回だけ行い、ブロック消去で全ステップを解く。
+    Since A and dt do not depend on t (tree-only), the LHS matrix is the same
+    for all steps. Do one LU factorization and solve all steps by block
+    elimination.
     """
     N = len(rho)
     A = build_spatial_operator(rho)
@@ -115,7 +117,7 @@ def solve_relaxation(rho, U0, t0, t_end, n_t):
 
 
 def analytic_tree_solution(t_end, RHO, use_full_seed):
-    """特性曲線 rho(0)=rho(t_end)*exp(2*t_end) で厳密解を評価する。"""
+    """Evaluate the exact solution along the characteristics rho(0)=rho(t_end)*exp(2*t_end)."""
     scale = np.exp(2.0 * t_end)
     rho0 = RHO * scale
     if use_full_seed:
@@ -127,13 +129,13 @@ def analytic_tree_solution(t_end, RHO, use_full_seed):
 
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--n-rho", type=int, default=41, help="rho方向の格子点数")
-    p.add_argument("--n-t", type=int, default=100, help="時間方向のステップ数")
+    p.add_argument("--n-rho", type=int, default=41, help="number of grid points in rho")
+    p.add_argument("--n-t", type=int, default=100, help="number of time steps")
     p.add_argument("--rho-max", type=float, default=1.75)
     p.add_argument("--t0", type=float, default=0.0)
     p.add_argument("--t-end", type=float, default=None)
     p.add_argument("--full-seed", action="store_true",
-                    help="tree多項式のみでなく、u_seed (tree+thermal) を初期条件に使う")
+                    help="use u_seed (tree+thermal) as the initial condition, not just the tree polynomial")
     p.add_argument("--out", type=str, default="results/relax_tree.npz")
     return p.parse_args()
 

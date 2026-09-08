@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
-frg_pinns_higgs_singlet/perturbation/rges.py の torch フリー版。
+Torch-free version of frg_pinns_higgs_singlet/perturbation/rges.py.
 
-摂動論的な2-loop RGEでモデルパラメータをUVまで走らせる部分は元々numpy/scipyのみ。
-違うのは calculate_cw_corrections(): 元コードは PyTorch の autograd で
-UVマッチング点における1-loop Coleman-Weinberg補正の1階・2階微分を計算していたが、
-ここでは同じ u_CW_zeroT を中心差分で数値微分することで置き換える
-(この呼び出しは初期化時に一度だけなので、有限差分で精度・速度とも問題ない)。
+The part that runs the model parameters up to the UV scale with the perturbative
+two-loop RGEs was numpy/scipy only to begin with. The difference is in
+calculate_cw_corrections(): the original code computed the first and second
+derivatives of the one-loop Coleman-Weinberg correction at the UV matching point
+with PyTorch autograd; here that is replaced by a central-difference numerical
+derivative of the same u_CW_zeroT (this call happens only once at
+initialization, so a finite difference is fine in both accuracy and speed).
 """
 
 import numpy as np
@@ -18,17 +20,17 @@ from .config_params import lamH, lamS, lamHS, mhsq, mssq, vew
 PARAM_ORDER = ["g1", "g2", "g3", "yt", "lam", "lamS", "lamHS", "mhsq", "mssq"]
 
 eps = 1e-10
-NGS = 3.0  # Goldstoneボソンの自由度
+NGS = 3.0  # number of Goldstone-boson degrees of freedom
 C = 1.0
 
 # ==========================================
-# 1. 質量行列とCWポテンシャルの定義 (NumPy)
+# 1. Mass matrix and CW potential (NumPy)
 # ==========================================
 
 def scalar_masses_bare(rho_phys, sigma_phys, params, kt):
     """
-    スカラー場の裸の質量を計算します。
-    入力の rho_phys, sigma_phys はスケール kt で無次元化された値 (rho/k^2) を想定。
+    Compute the bare scalar masses.
+    rho_phys, sigma_phys are assumed to be dimensionless (rho/k^2), rescaled by kt.
     """
     lamH_t = params['lamH']
     lamS_t = params['lamS']
@@ -72,7 +74,7 @@ def gauge_masses_bare(rho_phys, params):
 
 def u_CW_zeroT(rho_phys, sigma_phys, params, kt):
     """
-    T=0 における 1-loop Coleman-Weinberg ポテンシャル (無次元)。
+    One-loop Coleman-Weinberg potential at T=0 (dimensionless).
     """
     mG2_b, m1_sq_b, m2_sq_b = scalar_masses_bare(rho_phys, sigma_phys, params, kt)
     mW_T2, mZ_T2, mA_T2 = gauge_masses_bare(rho_phys, params)
@@ -101,21 +103,22 @@ def u_CW_zeroT(rho_phys, sigma_phys, params, kt):
 
 
 # ==========================================
-# 2. CW補正の抽出
+# 2. Extraction of the CW corrections
 # ==========================================
 #
-# u_CW_zeroT の cw_term(m2) = (dof/64pi^2) m2^2 (log(|m2|+eps) - c) は、
-# rho0 = vew^2/kt^2 (tree-level極小点) で mG2 = u_rho = 0 ちょうどになる
-# (Goldstoneの質量がゼロになる点で評価しているため)。この点で
-# d^2/dm2^2 [m2^2 (log(|m2|+eps)-c)] を有限差分でサンプルすると、
-# 中心点 m2=0 (log(eps) を使う特別な値) と、有限のステップ h だけ離れた点
-# (log(h) 相当の"普通の"値) の間で不整合が生じ、二階微分の推定値が
-# h に依存して大きくドリフトしてしまう(真の解析微分は log(eps) で
-# 決まる有限値に収束する)。
+# In u_CW_zeroT, cw_term(m2) = (dof/64pi^2) m2^2 (log(|m2|+eps) - c). At
+# rho0 = vew^2/kt^2 (the tree-level minimum) one has mG2 = u_rho = 0 exactly,
+# since that is the point where the Goldstone mass vanishes. Sampling
+# d^2/dm2^2 [m2^2 (log(|m2|+eps)-c)] there by finite differences produces an
+# inconsistency between the central point m2=0 (a special value that uses
+# log(eps)) and points a finite step h away (an "ordinary" value ~ log(h)), so
+# the second-derivative estimate drifts strongly with h -- whereas the true
+# analytic derivative converges to a finite value set by log(eps).
 #
-# そのため、torch が利用可能な環境では元のPyTorch実装と全く同じ
-# autograd計算を使い、torch が無い環境でのみ有限差分にフォールバックする
-# (フォールバック値は近似であり、特に delta_lamH 等はズレうることに注意)。
+# We therefore use exactly the same autograd computation as the original
+# PyTorch implementation when torch is available, and fall back to finite
+# differences only when torch is absent (the fallback values are approximate;
+# in particular delta_lamH etc. can be off).
 
 def _calculate_cw_corrections_torch(params, kt):
     import torch
@@ -204,9 +207,10 @@ def _calculate_cw_corrections_torch(params, kt):
 
 def _calculate_cw_corrections_fd(params, kt):
     """
-    有限差分によるフォールバック (torch が無い環境向け、近似値)。
-    sigma は物理的に sigma>=0 でしか定義されないため、
-    sigma 方向は 0 を含む前進差分、rho 方向 (rho0 はドメイン内部) は中心差分を使う。
+    Finite-difference fallback (for environments without torch; approximate).
+    Since sigma is physically defined only for sigma>=0, the sigma direction
+    uses a forward difference including 0, while the rho direction (rho0 is in
+    the interior of the domain) uses a central difference.
     """
     rho0 = vew ** 2 / (kt ** 2)
     sigma0 = 0.0
@@ -258,7 +262,7 @@ def calculate_cw_corrections(params, kt):
 
 
 # ==========================================
-# 3. 初期化とRGEの実行 (NumPy/SciPy)
+# 3. Initialization and RGE solving (NumPy/SciPy)
 # ==========================================
 
 def default_init(mu0=150.0, yt=0.9):

@@ -1,18 +1,18 @@
 """
-frg_pinns_higgs_singlet/running_couplings.py の NumPy 版。
+NumPy version of frg_pinns_higgs_singlet/running_couplings.py.
 
-摂動論的2-loop RGE (perturbation.rges) をUVスケールまで走らせ、
-FRGフローの "UV端" (t_phys=0, k = k_IR*exp(-t_range)) におけるマッチング値
-(tree_params = [aH, aS, lamH, lamS, lamHS]) を用意する。
+Runs the perturbative two-loop RGEs (perturbation.rges) up to the UV scale and
+prepares the matching values at the "UV edge" of the FRG flow
+(t_phys=0, k = k_IR*exp(-t_range)): tree_params = [aH, aS, lamH, lamS, lamHS].
 
-また、FRGフロー中の任意の t_phys (物理的なFRG time) を摂動論のRGEスケール
-mu にマッピングして、その場での running couplings/quartics/masses を返す
-get_running_* 関数を提供する。
+Also provides the get_running_* functions, which map an arbitrary t_phys (the
+physical FRG time) during the flow onto the perturbative RGE scale mu and return
+the running couplings / quartics / masses there.
 
-FRG time の規約 (frg_pinns_higgs_singlet と共通):
-    t_phys = 0        : FRGフローのUV端 (k = k_IR * exp(-t_range) = k_IR * exp(2))
-    t_phys = t_range  : FRGフローのIR端 (k = k_IR, config_params.py 参照)
-    perturbative RGE のスケール: mu(t_phys) = k_IR * exp(t_phys - t_range)
+FRG-time convention (shared with frg_pinns_higgs_singlet):
+    t_phys = 0        : UV edge of the FRG flow (k = k_IR * exp(-t_range) = k_IR * exp(2))
+    t_phys = t_range  : IR edge of the FRG flow (k = k_IR, see config_params.py)
+    perturbative RGE scale: mu(t_phys) = k_IR * exp(t_phys - t_range)
 """
 
 import numpy as np

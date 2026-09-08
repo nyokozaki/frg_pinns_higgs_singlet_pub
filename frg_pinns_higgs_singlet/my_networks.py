@@ -40,8 +40,8 @@ def _as_list(hidden_dims):
 
 class FlexibleMLP(nn.Module):
     """
-    hidden_dims=[] なら恒等写像
-    例:
+    hidden_dims=[] means the identity map
+    e.g.:
         in_dim=3, hidden_dims=[256,256,256]
         -> Linear(3,256)-SiLU-Linear(256,256)-SiLU-Linear(256,256)-SiLU
     """
@@ -85,7 +85,7 @@ class BaseNet(nn.Module):
     """
     return:
         [N, N_r, N_s, N_rr, N_ss, N_rs]
-    既存インターフェース互換
+    Compatible with the existing interface.
     """
     def __init__(
         self,
@@ -105,7 +105,7 @@ class BaseNet(nn.Module):
         basew2 = int(2 * basew)
 
 
-        # デフォルト
+        # defaults
         if stem_hidden_dims is None:
             stem_hidden_dims = [basew, basew, basew]
         if rho_hidden_dims is None:

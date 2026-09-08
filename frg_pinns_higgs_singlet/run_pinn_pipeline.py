@@ -1,23 +1,24 @@
 #!/usr/bin/env python
 """
-frg_pinns_higgs_singlet: rho/sigma学習 + plots_pinn/への画像生成を一括で行う
-オーケストレータ。
+frg_pinns_higgs_singlet: orchestrator that runs rho/sigma training + image
+generation into plots_pinn/ in one shot.
 
-- 完了済みブロック(model_*.pt が rho{i}/sigma{i} の block1・block2 両方揃って
-  いるもの)は自動でスキップし、未完了ブロックから再開する。
-  (train_networks.py 自体のブロック内チェックポイント再開はそのまま活きるので、
-  ブロック途中で中断しても epoch 単位で再開される。)
-- Paperspace が再起動しても、同じコマンドを再実行するだけで良い。
-- 既存の data_UV/data_sigma を消して完全に学習し直したい場合だけ --fresh を
-  明示的に渡す(デフォルトでは何も削除しない)。
+- completed blocks (model_*.pt with both block1 and block2 present for
+  rho{i}/sigma{i}) are skipped automatically, resuming from the first
+  incomplete block.
+  (train_networks.py's own in-block checkpoint resume still works, so an
+  interruption partway through a block resumes at the epoch level.)
+- if Paperspace restarts, just re-run the same command.
+- pass --fresh explicitly only when you want to delete the existing
+  data_UV/data_sigma and retrain from scratch (nothing is deleted by default).
 
 Usage:
-    python run_pinn_pipeline.py                       # rho+sigmaを10000epochsで再開/学習し、完了したらプロット生成
+    python run_pinn_pipeline.py                       # resume/train rho+sigma for 10000 epochs, then generate plots when done
     python run_pinn_pipeline.py --epochs 6000
     python run_pinn_pipeline.py --modes rho
-    python run_pinn_pipeline.py --fresh                # data_UV/data_sigmaを消してから学習し直す
+    python run_pinn_pipeline.py --fresh                # delete data_UV/data_sigma, then retrain
     python run_pinn_pipeline.py --plot-only --tag T200_h12_
-    python run_pinn_pipeline.py --sequential           # rho→sigmaの順に実行(並行実行しない)
+    python run_pinn_pipeline.py --sequential           # run rho then sigma in order (not in parallel)
 """
 import argparse
 import os
@@ -39,8 +40,8 @@ DATA_DIRS = {
 
 
 def completed_range(mode):
-    """未完了の先頭ブロックから最終ブロックまでの 'N-4' 文字列を返す。
-    全ブロック完了済みなら None を返す。"""
+    """Return the 'N-4' string from the first incomplete block to the last block.
+    Return None if all blocks are complete."""
     d = DATA_DIRS[mode]
     for i in range(N_BLOCKS):
         done = all(

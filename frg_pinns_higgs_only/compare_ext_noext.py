@@ -1,7 +1,8 @@
 """
-data_UV_ext/ (loss_extensionあり) と data_UV_noext/ (loss_extensionなし) の
-学習済みモデルを、stitched_slice_matched (show_UV1D.py) と同じロジックで
-5 rhoブロックを継ぎ合わせて評価し、t断面ごとに並べて比較する。
+Evaluate the trained models in data_UV_ext/ (with loss_extension) and
+data_UV_noext/ (without loss_extension) by stitching the 5 rho blocks with the
+same logic as stitched_slice_matched (show_UV1D.py), and compare them side by
+side for each t slice.
 """
 
 import gc

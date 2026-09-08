@@ -1,9 +1,9 @@
 """
-frg_pinns_higgs_singlet/perturbation/JBJF_helper.py の J_Bnp / J_Fnp を
-そのまま抜き出した、NumPyのみの有限温度熱積分。torch版 (J_B, J_F) はここでは
-不要なので含めていない。
+NumPy-only finite-temperature thermal integrals, taken directly from
+J_Bnp / J_Fnp in frg_pinns_higgs_singlet/perturbation/JBJF_helper.py.
+The torch versions (J_B, J_F) are not needed here and are not included.
 
-argument: y2 = (m/T)^2  (m, T ともに無次元)
+argument: y2 = (m/T)^2  (m, T both dimensionless)
 """
 
 import numpy as np
@@ -43,7 +43,7 @@ def J_Bnp(y2, deg=100, x_max=20.0, epsilon=1e-6, alpha=1.0):
     # Case 2: y2 < 0
     if np.any(mask_neg):
         y2_n = y2_flat[mask_neg].reshape(-1, 1)
-        xc = np.sqrt(-y2_n)  # E=0 となる特異点
+        xc = np.sqrt(-y2_n)  # singular point where E=0
 
         x_upper = np.maximum(0.0, xc - epsilon)
         u_min1, u_max1 = 0.0, np.sqrt(x_upper)

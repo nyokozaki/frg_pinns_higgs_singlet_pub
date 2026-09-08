@@ -2,19 +2,19 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-# 必要なモジュールとパラメータのインポート
+# import the needed modules and parameters
 from perturbation.config_params import tau_uv, finite_T, k_IR, t_range, fixed_tau
 from perturbation.rges import make_running_couplings
 from perturbation.JBJF_helper import J_Bnp as J_B, J_Fnp as J_F
 
 # ============================================================
-# RGEのセットアップ
+# RGE setup
 # ============================================================
 
 rc = make_running_couplings(mu0=k_IR, mu_end=2000.0)
 
 # ============================================================
-# ヘルパー関数
+# helper functions
 # ============================================================
 
 def _rge_t_from_phys_t(t_phys):
@@ -35,13 +35,13 @@ def get_running_couplings(t):
     return g1_, g2_, yt_, lam_, mhsq_
 
 # ============================================================
-# 質量とポテンシャルの定義 (Arnold-Espinosa方式)
+# definition of masses and potential (Arnold-Espinosa scheme)
 # ============================================================
 
 def scalar_masses_AE(rho_phys, t_phys):
     """
-    Arnold-Espinosa方式用：Bare質量と、デバイ熱質量補正を含んだEffective質量を両方返す
-    (singletなしなのでHiggs単一チャンネル)
+    For the Arnold-Espinosa scheme: return both the bare masses and the effective masses including the Debye thermal-mass correction
+    (no singlet, so a single Higgs channel)
     """
     g1, g2, yt, lam_t, mhsq_t = get_running_couplings(t_phys)
     if fixed_tau == False:
@@ -53,7 +53,7 @@ def scalar_masses_AE(rho_phys, t_phys):
     kt = k_IR * np.exp(-t_range + t_phys)
     muH2_t = mhsq_t / kt**2
 
-    # デバイ質量補正 (Pi)
+    # Debye mass correction (Pi)
     Pi_H = ( (3.0 * g2**2 + g1**2) / 16.0
              + yt**2 / 4.0
              + lam_t / 2.0 ) * tau_t**2
@@ -114,7 +114,7 @@ def u_thermal_finiteT_AE(t_phys, rho_phys):
     t_phys = np.asarray(t_phys).reshape(-1, 1)
     rho_phys_inner = np.asarray(rho_phys).reshape(-1, 1)
 
-    # BareとEffectiveの質量を両方取得
+    # get both the bare and effective masses
     scalars_b, scalars_e = scalar_masses_AE(rho_phys_inner, t_phys)
     mG2_b, mH2_b = scalars_b
     mG2_e, mH2_e = scalars_e
@@ -131,12 +131,12 @@ def u_thermal_finiteT_AE(t_phys, rho_phys):
     NGS = 3.0
 
     # ============================================================
-    # 1-loop項: J_B, J_F にはデバイ質量を含まない Bare質量 を渡す
+    # 1-loop term: pass the bare masses (no Debye mass) to J_B, J_F
     # ============================================================
     JB_G = J_B(mG2_b / tau2)
     JB_H = J_B(mH2_b / tau2)
 
-    # W, ZはTransverseとLongitudinalで同じBare質量を持つため統合 (W: 6 dof, Z: 3 dof, A: 1 dof(longitudinal zero mode))
+    # W, Z have the same bare mass for transverse and longitudinal, so merge them (W: 6 dof, Z: 3 dof, A: 1 dof (longitudinal zero mode))
     JB_W = J_B(mW_2_b / tau2)
     JB_Z = J_B(mZ_2_b / tau2)
     JB_A = J_B(mA_2_b / tau2)
@@ -150,11 +150,11 @@ def u_thermal_finiteT_AE(t_phys, rho_phys):
     u_th_1loop = u_th_scalar + u_th_gauge + u_th_top
 
     # ============================================================
-    # リング補正項 (Arnold-Espinosa方式):
-    # ゼロモード (m^2)^{3/2} を (m^2 + Pi)^{3/2} に置き換える
+    # ring correction term (Arnold-Espinosa scheme):
+    # replace the zero mode (m^2)^{3/2} by (m^2 + Pi)^{3/2}
     # ============================================================
     def get_m3(m2):
-        # 虚数質量(m^2 < 0)はリング補正から除外するため 0 にクリップ
+        # clip to 0 to exclude imaginary masses (m^2 < 0) from the ring correction
         return np.power(np.clip(m2, a_min=0.0, a_max=None), 1.5)
 
     ring_G = NGS * (get_m3(mG2_e) - get_m3(mG2_b))
@@ -164,7 +164,7 @@ def u_thermal_finiteT_AE(t_phys, rho_phys):
     ring_ZL = 1.0 * (get_m3(mZ_L2_e) - get_m3(mZ_2_b)) # Z longitudinal
     ring_AL = 1.0 * (get_m3(mA_L2_e) - get_m3(mA_2_b)) # Photon longitudinal
 
-    # 係数は次元解析より -tau / (12 pi) になる
+    # the coefficient is -tau / (12 pi) by dimensional analysis
     u_ring = - (tau_t / (12.0 * np.pi)) * (ring_G + ring_H + ring_WL + ring_ZL + ring_AL)
 
     u_th_total = u_th_1loop + u_ring
@@ -184,10 +184,10 @@ def u_pert(t_phys, rho_phys):
 
 def u_seed_finiteT(t_phys, rho_phys):
     u_0 = u_pert(t_phys, rho_phys)
-    u_th = u_thermal_finiteT_AE(t_phys, rho_phys) # AE方式を呼び出し
+    u_th = u_thermal_finiteT_AE(t_phys, rho_phys) # call the AE scheme
     u_total = u_0 + u_th
 
-    # オフセットの計算
+    # compute the offset
     rho_zero = np.zeros_like(rho_phys)
 
     u_0_offset = u_pert(t_phys, rho_zero)
@@ -197,7 +197,7 @@ def u_seed_finiteT(t_phys, rho_phys):
     return u_total - u_total_offset
 
 # ============================================================
-# プロットの実行
+# run the plot
 # ============================================================
 def plot():
     t_vals = [-2.0]

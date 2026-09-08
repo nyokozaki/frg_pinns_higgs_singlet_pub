@@ -30,15 +30,15 @@ def _torch_from_rc(arr, ref):
 def _rge_t_from_phys_t(t_phys):
     # t_phys: torch.Tensor (batch,1)
     t_phys_np = t_phys.detach().cpu().numpy()
-    # まず 1D にフラット化
+    # first flatten to 1D
     t_flat = t_phys_np.reshape(-1)
     t_rge_flat = np.log(k_IR) + (-t_range) + t_flat
     t_min = rc["t_min"]
     t_max = rc["t_max"]
-    # 下側だけ少し余裕を見て clamp
+    # clamp with a little margin on the lower side only
     t_rge_flat = np.maximum(t_rge_flat, t_min + 1e-8)
     
-    return t_rge_flat  # ここは 1D (N,) のまま返す
+    return t_rge_flat  # returned still as 1D (N,)
 
 def get_running_couplings(t):
     # t: torch.Tensor with shape (N,1) or (...,1)
@@ -48,7 +48,7 @@ def get_running_couplings(t):
     yt_flat = rc["yt"](t_rge_flat)
     lamS_flat = rc["lamS"](t_rge_flat)
     lamHS_flat = rc["lamHS"](t_rge_flat)
-    # 元の t と同じ shape に戻す
+    # restore to the same shape as the original t
     g1_ = _torch_from_rc(g1_flat.reshape(-1, 1), t)
     g2_ = _torch_from_rc(g2_flat.reshape(-1, 1), t)
     yt_ = _torch_from_rc(yt_flat.reshape(-1, 1), t)

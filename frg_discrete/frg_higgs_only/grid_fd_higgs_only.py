@@ -1,9 +1,10 @@
 """
-rho 一様格子(1次元)と、有限差分による微分演算子。
+Uniform 1D grid in rho and finite-difference derivative operators.
 
-frg_discrete/grid_fd.py の Grid2D から sigma 方向を除去した版
-(singlet場が存在しないため空間次元は rho のみ)。central/central4/upwind の
-3スキームとその使い分けの理由は grid_fd.py 冒頭のコメントと同じ。
+The version of frg_discrete/grid_fd.py's Grid2D with the sigma direction
+removed (no singlet field, so the only space dimension is rho). The three
+schemes central/central4/upwind and the reasons for choosing between them are
+the same as in the header comment of grid_fd.py.
 """
 
 import numpy as np
@@ -32,7 +33,7 @@ class Grid1D:
         self.shape = self.RHO.shape
 
     # ------------------------------------------------------------
-    # 1D スタンシル (2次精度)
+    # 1D stencils (2nd order)
     # ------------------------------------------------------------
     @staticmethod
     def _first_deriv_1d(U, h):
@@ -64,7 +65,7 @@ class Grid1D:
     def _deriv_1d_order4(cls, U, h, deriv_order):
         n = U.shape[0]
         if n < 5:
-            raise ValueError("scheme='central4' には5点以上の格子が必要です")
+            raise ValueError("scheme='central4' requires at least 5 grid points")
         d = np.zeros_like(U)
 
         def add(i, offsets):
@@ -89,7 +90,7 @@ class Grid1D:
         return d
 
     # ------------------------------------------------------------
-    # 公開インターフェース
+    # Public interface
     # ------------------------------------------------------------
     def d_drho(self, U, scheme="central"):
         if scheme == "central":
@@ -106,7 +107,7 @@ class Grid1D:
         return self._second_deriv_1d(U, self.drho)
 
     def derivatives(self, U, scheme="central"):
-        """U(rho) から (u_rho, u_rhorho) を返す。"""
+        """Return (u_rho, u_rhorho) from U(rho)."""
         u_rho = self.d_drho(U, scheme=scheme)
         u_rhorho = self.d2_drho2(U, scheme=scheme)
         return u_rho, u_rhorho

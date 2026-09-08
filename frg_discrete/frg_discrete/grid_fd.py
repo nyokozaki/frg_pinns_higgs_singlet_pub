@@ -1,32 +1,40 @@
 """
-(rho, sigma) 場空間上の一様格子と、有限差分による微分演算子。
+Uniform grid on the (rho, sigma) field space and finite-difference derivative
+operators.
 
-2種類の1階微分スキームを用意する:
-  - central : 内部は2次精度中心差分、境界は2次精度片側差分。
-              質量固有値・熱閾値関数 (反応項) の評価に使う分には問題ない。
-  - upwind  : 1次精度の片側差分 (下流バイアス)。
-              フロー方程式の (2+eta_rho)*rho*u_rho, (2+eta_sigma)*sigma*u_sigma
-              は移流項であり、その"速度"は rho,sigma>=0 の物理領域で常に
-              符号が固定されている ( d/dtau [tau=-t] で見ると advection速度
-              (2+eta)*rho, (2+eta)*sigma は常に非負)。中心差分+explicit RK
-              の組み合わせは移流項に対して数値的に不安定になりやすく、
-              格子を細かくするほど安定に必要な時間刻みが小さくなって
-              solve_ivp の適応刻み幅が破綻する。upwind (風上) 差分は
-              人工粘性を持ち、この不安定性を抑える。
+Two first-derivative schemes are provided:
+  - central : second-order central difference in the interior, second-order
+              one-sided difference at the boundaries. Adequate for evaluating
+              the mass eigenvalues and thermal threshold functions (the
+              reaction terms).
+  - upwind  : first-order one-sided difference (downstream bias). The terms
+              (2+eta_rho)*rho*u_rho and (2+eta_sigma)*sigma*u_sigma of the flow
+              equation are advection terms whose "velocity" has a fixed sign
+              throughout the physical region rho,sigma>=0 (viewed in
+              d/dtau [tau=-t], the advection velocities (2+eta)*rho and
+              (2+eta)*sigma are always non-negative). Central differencing
+              combined with explicit RK tends to be numerically unstable for
+              advection terms, and the finer the grid the smaller the time step
+              required for stability, which breaks the adaptive step control of
+              solve_ivp. The upwind difference carries artificial viscosity and
+              suppresses this instability.
 
-2階微分 (u_rhorho, u_sigmasigma, u_rhosigma) は反応項(質量固有値)にしか
-現れず移流的な不安定性の原因にならないため、常に中心差分を用いる。
+The second derivatives (u_rhorho, u_sigmasigma, u_rhosigma) appear only in the
+reaction terms (mass eigenvalues) and do not cause advective instability, so a
+central difference is always used for them.
 """
 
 import numpy as np
 
 
 def _fd_coeffs(offsets, deriv_order):
-    """整数offsets (格子点からの相対位置) を使った有限差分係数を、Fornberg法
-    (未定係数法) で厳密に求める。
+    """Finite-difference coefficients on integer offsets (positions relative to
+    the grid point), obtained exactly by the Fornberg method (method of
+    undetermined coefficients).
 
-    sum_k c_k * f(x+offsets_k*h) = h^deriv_order * f^(deriv_order)(x) + O(h^len(offsets))
-    となる c を返す (m=len(offsets)点のステンシルで、次数 m-deriv_order 精度)。
+    Returns c such that
+      sum_k c_k * f(x+offsets_k*h) = h^deriv_order * f^(deriv_order)(x) + O(h^len(offsets))
+    (an m=len(offsets)-point stencil, accurate to order m-deriv_order).
     """
     offsets = np.asarray(offsets, dtype=float)
     m = len(offsets)
@@ -49,12 +57,12 @@ class Grid2D:
         self.n_rho = n_rho
         self.n_sigma = n_sigma
 
-        # indexing='ij' -> axis 0 は rho, axis 1 は sigma
+        # indexing='ij' -> axis 0 is rho, axis 1 is sigma
         self.RHO, self.SIGMA = np.meshgrid(self.rho, self.sigma, indexing='ij')
         self.shape = self.RHO.shape
 
     # ------------------------------------------------------------
-    # 1D スタンシル (軸に沿った1階・2階微分, 2次精度)
+    # 1D stencils (first/second derivative along an axis, 2nd order)
     # ------------------------------------------------------------
     @staticmethod
     def _first_deriv_1d(U, axis, h):
@@ -116,11 +124,12 @@ class Grid2D:
 
     @classmethod
     def _deriv_1d_order4(cls, U, axis, h, deriv_order):
-        """4次精度 (5点ステンシル、Fornberg法で係数導出) の1階/2階微分。
-        内部は対称5点、境界寄り2点は非対称5点ステンシルを使う。"""
+        """Fourth-order (5-point stencil, coefficients from the Fornberg method)
+        first/second derivative. A symmetric 5-point stencil in the interior, and
+        asymmetric 5-point stencils for the two points near each boundary."""
         n = U.shape[axis]
         if n < 5:
-            raise ValueError("scheme='central4' には各方向5点以上の格子が必要です")
+            raise ValueError("scheme='central4' requires at least 5 grid points per direction")
         d = np.zeros_like(U)
 
         s = [slice(None)] * U.ndim
@@ -146,10 +155,11 @@ class Grid2D:
     @staticmethod
     def _first_deriv_upwind_1d(U, axis, h):
         """
-        1次精度、下流(backward)バイアスの片側差分。
-        advection速度が常に非負 (rho,sigma>=0 の物理領域) であることを前提に、
-        内部点・右境界は backward difference (i, i-1)、
-        左境界 (速度=0 の停留点) だけ forward difference を使う。
+        First-order, downstream (backward) biased one-sided difference.
+        Assuming the advection velocity is always non-negative (physical region
+        rho,sigma>=0), the interior points and the right boundary use a backward
+        difference (i, i-1), and only the left boundary (a stationary point with
+        velocity=0) uses a forward difference.
         """
         n = U.shape[axis]
         d = np.empty_like(U)
@@ -164,13 +174,13 @@ class Grid2D:
         # interior + right edge: backward difference
         d[sl(slice(1, n))] = (U[sl(slice(1, n))] - U[sl(slice(0, n - 1))]) / h
 
-        # left edge (velocity = 0 の停留点): forward difference
+        # left edge (stationary point with velocity = 0): forward difference
         d[sl(0)] = (U[sl(1)] - U[sl(0)]) / h
 
         return d
 
     # ------------------------------------------------------------
-    # 公開インターフェース
+    # Public interface
     # ------------------------------------------------------------
     def d_drho(self, U, scheme="central"):
         if scheme == "central":
@@ -214,14 +224,18 @@ class Grid2D:
 
     def derivatives(self, U, scheme="central"):
         """
-        U(rho, sigma) から (u_rho, u_sigma, u_rhorho, u_sigmasigma, u_rhosigma) を返す。
+        Return (u_rho, u_sigma, u_rhorho, u_sigmasigma, u_rhosigma) from U(rho, sigma).
 
-        scheme="central" : 全て2次精度中心差分 (精度重視、高解像度では不安定になりうる)
-        scheme="central4": 全て4次精度中心差分 (5点ステンシル, Fornberg法。
-                             内部+境界寄り2点とも4次精度。各方向5点以上必要)
-        scheme="upwind"   : 1階微分 (u_rho, u_sigma, u_rhosigma) を1次精度upwindに、
-                             2階微分 (u_rhorho, u_sigmasigma) は中心差分のまま
-                             (移流項の安定化。flow_equation.py 参照)
+        scheme="central" : all second-order central differences (accuracy first;
+                             can be unstable at high resolution)
+        scheme="central4": all fourth-order central differences (5-point stencil,
+                             Fornberg method; fourth order in the interior and at
+                             the two points near each boundary; needs >= 5 points
+                             per direction)
+        scheme="upwind"   : first derivatives (u_rho, u_sigma, u_rhosigma) use a
+                             first-order upwind scheme, second derivatives
+                             (u_rhorho, u_sigmasigma) stay central (advection-term
+                             stabilization; see flow_equation.py)
         """
         u_rho = self.d_drho(U, scheme=scheme)
         u_sigma = self.d_dsigma(U, scheme=scheme)

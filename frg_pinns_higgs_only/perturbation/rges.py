@@ -4,26 +4,26 @@ import numpy as np
 import torch
 from scipy.integrate import solve_ivp
 
-# config_params から必要なパラメータをすべてインポート
+# import all needed parameters from config_params
 from .gauge_one_loop import gauge_couplings_1loop
 from .config_params import lamH, mhsq, vew
 
 PARAM_ORDER = ["g1", "g2", "g3", "yt", "lam", "mhsq"]
 
-# 計算用の微小値と定数
+# small values and constants used in the computation
 eps = 1e-10
-NGS = 3.0  # Goldstoneボソンの自由度
+NGS = 3.0  # Goldstone boson degrees of freedom
 C = 1.0
 
 # ==========================================
-# 1. 質量行列とCWポテンシャルの定義 (PyTorch)
-#    singlet は存在しないので Higgs 単一チャンネルのみ
+# 1. Definition of the mass matrix and the CW potential (PyTorch)
+#    no singlet, so only the single Higgs channel
 # ==========================================
 
 def scalar_masses_bare(rho_phys, params, kt):
     """
-    スカラー場(Higgs)の裸の質量を計算します。
-    入力の rho_phys はスケール kt で無次元化された値 (rho/k^2) を想定。
+    Compute the bare scalar-field (Higgs) masses.
+    rho_phys is expected to be nondimensionalized by the scale kt (rho/k^2).
     """
     lamH_t = params['lamH']
     muH2_t = params['mhsq'] / (kt * kt)
@@ -38,7 +38,7 @@ def scalar_masses_bare(rho_phys, params, kt):
 
 def gauge_masses_bare(rho_phys, params):
     """
-    ゲージボソンの裸の質量を計算します。
+    Compute the bare gauge-boson masses.
     """
     g1 = params['g1']
     g2 = params['g2']
@@ -51,7 +51,7 @@ def gauge_masses_bare(rho_phys, params):
 
 def u_CW_zeroT(rho_phys, params, kt):
     """
-    T=0 における 1-loop Coleman-Weinberg ポテンシャル (無次元)。Higgs側のみ。
+    1-loop Coleman-Weinberg potential at T=0 (dimensionless). Higgs side only.
     """
     mG2_b, mH2_b = scalar_masses_bare(rho_phys, params, kt)
     mW_T2, mZ_T2, mA_T2 = gauge_masses_bare(rho_phys, params)
@@ -85,55 +85,57 @@ def u_CW_zeroT(rho_phys, params, kt):
     return cw_H + cw_W + cw_Z + cw_top
 
 # ==========================================
-# 2. CW補正の抽出 (Autogradによる自動微分)
+# 2. Extraction of the CW corrections (automatic differentiation via autograd)
 # ==========================================
 
 def calculate_cw_corrections(params, kt):
     """
-    CWポテンシャルの微分を計算し、各パラメータへの補正値を返します。
+    Compute the derivatives of the CW potential and return the correction to
+    each parameter.
     """
     rho_dimful = vew**2
 
-    # 無次元化してPyTorchテンソル化 (勾配計算を有効にする)
+    # nondimensionalize and make PyTorch tensors (enable gradient tracking)
     rho_tilde = torch.tensor(rho_dimful / (kt**2), requires_grad=True, dtype=torch.float64)
 
-    # 無次元CWポテンシャル
+    # dimensionless CW potential
     u_cw = u_CW_zeroT(rho_tilde, params, kt)
 
-    # 1次微分 (mu_H^2 への寄与)
+    # first derivative (contribution to mu_H^2)
     (du_drho,) = torch.autograd.grad(u_cw, (rho_tilde,), create_graph=True)
 
-    # 2次微分 (lam への寄与)
+    # second derivative (contribution to lam)
     d2u_drho2 = torch.autograd.grad(du_drho, rho_tilde, retain_graph=True)[0]
 
-    # 次元を復元して物理補正値へ変換 (V_cw = k^4 * u_cw, rho = k^2 * rho_tilde)
+    # restore dimensions and convert to physical corrections (V_cw = k^4 * u_cw, rho = k^2 * rho_tilde)
     delta_mhsq = (kt**2) * du_drho.item()
     delta_lamH = 0.5 * d2u_drho2.item()
 
     return delta_mhsq, delta_lamH
 
 # ==========================================
-# 3. 初期化とRGEの実行 (NumPy/SciPy)
+# 3. Initialization and running the RGEs (NumPy/SciPy)
 # ==========================================
 
 def default_init(mu0=150.0, yt=0.9):
     """
-    【修正】 引数から lamS_val などを排除し、config_params のインポート値を直接使用
+    Uses the imported values from config_params directly, rather than taking
+    lamS_val etc. as arguments.
     """
     gy_, g2_, g3_ = gauge_couplings_1loop(mu0)
 
-    # config_params から読み込んだ物理パラメータをセット
+    # set the physical parameters read from config_params
     params_tree = {
         'g1': gy_, 'g2': g2_, 'g3': g3_, 'yt': yt,
         'lamH': lamH,
         'mhsq': mhsq,
     }
 
-    # CW補正量の算出
+    # compute the CW corrections
     d_mhsq, d_lam = calculate_cw_corrections(params_tree, mu0)
 
-    # 有効ポテンシャルにおいて物理的観測量に合わせるため、
-    # 裸のパラメータ(初期値)からCW寄与分を引き去ります。
+    # subtract the CW contribution from the bare (initial) parameters so that
+    # the effective potential matches the physical observables.
     lam_mod   = lamH - d_lam
     mhsq_mod  = mhsq - d_mhsq
 
@@ -149,7 +151,7 @@ def default_init(mu0=150.0, yt=0.9):
 def beta_functions(t, y):
     g1, g2, g3, yt, lam, mhsq_val = y
 
-    # --- よく使うべき乗の事前計算 ---
+    # --- precompute frequently used powers ---
     g1sq, g2sq, g3sq = g1**2, g2**2, g3**2
     yt2 = yt**2
     yt4 = yt2**2

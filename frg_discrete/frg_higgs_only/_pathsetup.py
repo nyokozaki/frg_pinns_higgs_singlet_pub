@@ -1,13 +1,12 @@
 """
-frg_discrete (兄弟フォルダ) の検証済みモジュール群
+Add the sibling folder frg_discrete to sys.path so its validated modules
 (perturbation/, running_couplings.py, seed_potential.py, flow_equation.py)
-を import できるよう sys.path に追加する。
+can be imported.
 
-frg_discrete4 はUVマッチング・種ポテンシャルの中身を frg_discrete から
-そのまま再利用し、"shooting" (t=0からの初期値問題としてforward積分) の
-代わりに、空間+時間をまとめて離散化してグローバルに解く
-リラクゼーション法 (Numerical Recipes 17.3節の意味での relaxation method)
-を試す。
+This folder reuses the UV matching and seed potential from frg_discrete as-is,
+and, instead of "shooting" (forward integration as an initial-value problem from
+t=0), tries a relaxation method (in the sense of Numerical Recipes Sec. 17.3):
+discretize space and time together and solve the whole trajectory globally.
 """
 
 import os

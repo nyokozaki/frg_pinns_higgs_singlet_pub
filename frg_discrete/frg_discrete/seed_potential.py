@@ -1,13 +1,14 @@
 """
-FRGフローの初期条件 (UV端, t_phys=0) を与える種ポテンシャル。
+Seed potential giving the initial condition of the FRG flow (UV edge, t_phys=0).
 
-frg_pinns_higgs_singlet の以下の関数の NumPy 移植:
+NumPy port of the following functions from frg_pinns_higgs_singlet:
   - my_networks.u_tree_exact
-  - thermal_functions.u_thermal_finiteT (1-loop, bare質量のみ; リング項は無効化)
-    (thermal_functions.py 内でも ring 項はコメントアウトされ u_th = u_th_1loop の
-     みが使われているため、それに合わせている)
-  - loss_bc0 で実際に境界条件として課される u_seed = u_tree_exact + u_thermal_finiteT
-    (uv_cw のCW寄与はデフォルト重み0で無効なので含めていない)
+  - thermal_functions.u_thermal_finiteT (1-loop, bare masses only; ring term disabled)
+    (in thermal_functions.py the ring term is also commented out and only
+     u_th = u_th_1loop is used, so this matches that.)
+  - u_seed = u_tree_exact + u_thermal_finiteT, the boundary condition actually
+    imposed by loss_bc0 (the CW contribution of uv_cw has default weight 0 and
+    is therefore not included).
 """
 
 import numpy as np
@@ -68,8 +69,9 @@ def _scalar_masses_bare(rho_phys, sigma_phys, t_phys):
 
 def u_thermal_finiteT(t_phys, rho_phys, sigma_phys):
     """
-    有限温度の1-loop熱ポテンシャル u_th(t, rho, sigma) (Arnold-Espinosa style, ring項なし)。
-    thermal_functions.u_thermal_finiteT と同じ内容 (bare質量のみ使用)。
+    Finite-temperature one-loop thermal potential u_th(t, rho, sigma)
+    (Arnold-Espinosa style, no ring term). Same content as
+    thermal_functions.u_thermal_finiteT (bare masses only).
     """
     mG2_b, m1_sq_b, m2_sq_b, g1, g2, yt = _scalar_masses_bare(rho_phys, sigma_phys, t_phys)
 
@@ -101,8 +103,9 @@ def u_thermal_finiteT(t_phys, rho_phys, sigma_phys):
 
 def u_seed(t_phys, rho_phys, sigma_phys):
     """
-    FRGフローの初期条件 (t_phys=0, config_params.t_range に対応するUV端)。
-    loss_bc0 が実際にPINNへ課す境界条件 (uv_cw=0 のデフォルト設定) と同じ内容。
+    Initial condition of the FRG flow (t_phys=0, the UV edge corresponding to
+    config_params.t_range). Same content as the boundary condition loss_bc0
+    actually imposes on the PINN (default setting uv_cw=0).
     """
     u = u_tree_exact(t_phys, rho_phys, sigma_phys)
     if finite_T:

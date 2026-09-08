@@ -1,6 +1,6 @@
 """
-frg_discrete/seed_potential.py の singlet除去版(Higgs単一チャンネル)。
-FRGフローの初期条件 (UV端, t_phys=0) を与える種ポテンシャル。
+Singlet-free version of frg_discrete/seed_potential.py (single Higgs channel).
+Seed potential giving the initial condition of the FRG flow (UV edge, t_phys=0).
 """
 
 import numpy as np
@@ -40,8 +40,9 @@ def _scalar_masses_bare(rho_phys, t_phys):
 
 def u_thermal_finiteT(t_phys, rho_phys):
     """
-    有限温度1-loop熱ポテンシャル u_th(t, rho) (Arnold-Espinosa style, ring項なし)。
-    seed_potential.u_thermal_finiteT と同じ内容(bare質量のみ使用)。
+    Finite-temperature one-loop thermal potential u_th(t, rho) (Arnold-Espinosa
+    style, no ring term). Same content as seed_potential.u_thermal_finiteT
+    (bare masses only).
     """
     mG2_b, mH2_b, g1, g2, yt = _scalar_masses_bare(rho_phys, t_phys)
 
@@ -71,7 +72,7 @@ def u_thermal_finiteT(t_phys, rho_phys):
 
 
 def u_seed(t_phys, rho_phys):
-    """FRGフローの初期条件 (t_phys=0, config_params.t_range に対応するUV端)。"""
+    """Initial condition of the FRG flow (t_phys=0, the UV edge corresponding to config_params.t_range)."""
     u = u_tree_exact(t_phys, rho_phys)
     if finite_T:
         u = u + u_thermal_finiteT(t_phys, rho_phys)

@@ -1,13 +1,13 @@
 """
-frg_discrete/flow_equation.py の singlet除去版(Higgs単一チャンネル)。
+Singlet-free version of frg_discrete/flow_equation.py (single Higgs channel).
 
-Wetterich方程式 (LPA', 有限温度) の右辺を格子上で評価する。singletが存在
-しないため、質量固有値の混合 (M11,M22,M12,disc,sqrt_disc) はそもそも
-出てこず、Higgs質量 mH2 = u_rho + 2*rho*u_rhorho と Goldstone質量
-mG2 = u_rho の2つだけになる。
+Evaluate the right-hand side of the Wetterich equation (LPA', finite T) on the
+grid. With no singlet, the mass-eigenvalue mixing (M11,M22,M12,disc,sqrt_disc)
+does not arise at all; there are only two masses, the Higgs mass
+mH2 = u_rho + 2*rho*u_rhorho and the Goldstone mass mG2 = u_rho.
 
-frg_discrete/flow_equation.py の disc→0 分岐点非平滑性 (README.md参照) は、
-この縮約では構造的に発生し得ない。
+The disc->0 branch-point non-smoothness of frg_discrete/flow_equation.py (see
+README.md) cannot arise structurally in this reduction.
 """
 
 import numpy as np
@@ -39,7 +39,7 @@ def _inv_sqrt(m2, floor=EPS):
 
 
 def u_tree_derivs(t_phys, rho):
-    """u_tree_exact の (u_rho, u_rhorho) を厳密に返す。"""
+    """Return the exact (u_rho, u_rhorho) of u_tree_exact."""
     muH2_t = aH * np.exp(-2.0 * t_phys)
     u_rho = muH2_t + 2.0 * lamH * rho
     u_rhorho = 2.0 * lamH
@@ -48,8 +48,9 @@ def u_tree_derivs(t_phys, rho):
 
 def _rloop_from_derivs(t_phys, rho, u_rho, u_rhorho, warn_on_tachyon=False, mass_floor=0.0):
     """
-    質量固有値 (mG2, mH2、混合なし) と熱閾値関数から rloop = kloop*loop_sum を計算する。
-    singletがないので disc_delta/disc_cut に相当するものはそもそも不要。
+    Compute rloop = kloop*loop_sum from the masses (mG2, mH2; no mixing) and the
+    thermal threshold functions. With no singlet, there is no need for anything
+    equivalent to disc_delta/disc_cut.
     """
     g1, g2, yt = get_running_couplings(t_phys)
 
@@ -128,7 +129,7 @@ def _rloop_from_derivs(t_phys, rho, u_rho, u_rhorho, warn_on_tachyon=False, mass
 
 
 def flow_rhs(t_phys, U, grid, warn_on_tachyon=False, scheme="upwind", mass_floor=0.0):
-    """du/dt(t_phys, rho) を格子全体で返す (フル u を直接積分)。"""
+    """Return du/dt(t_phys, rho) over the whole grid (integrates the full u directly)."""
     u_rho, u_rhorho = grid.derivatives(U, scheme=scheme)
     rho = grid.RHO
 
@@ -143,7 +144,7 @@ def flow_rhs(t_phys, U, grid, warn_on_tachyon=False, scheme="upwind", mass_floor
 
 
 def flow_rhs_w(t_phys, W, grid, warn_on_tachyon=False, scheme="upwind"):
-    """u = u_tree_exact(t,rho) + w とおいたときの dw/dt を返す。"""
+    """Return dw/dt for u = u_tree_exact(t,rho) + w."""
     w_rho, w_rhorho = grid.derivatives(W, scheme=scheme)
     rho = grid.RHO
 

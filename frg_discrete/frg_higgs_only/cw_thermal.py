@@ -1,10 +1,10 @@
 """
-frg_discrete4_main/cw_thermal.py の singlet除去版(Higgs単一チャンネル)。
+Singlet-removed version of frg_discrete4_main/cw_thermal.py (single Higgs channel).
 
-用途: 「full flow eq. (rloop+eta)」のNewton-Krylov解と比較するための、
-静的な参照カーブ。running couplings上で評価した1-loop Coleman-Weinberg
-(T=0) + 有限温度1-loop熱ポテンシャルを "RGE-run tree + CW (+ thermal)" と
-して提供する。
+Purpose: a static reference curve for comparison with the Newton-Krylov solution
+of the "full flow eq. (rloop+eta)". Provides the 1-loop Coleman-Weinberg (T=0)
+evaluated on the running couplings + the finite-temperature 1-loop thermal
+potential as "RGE-run tree + CW (+ thermal)".
 """
 
 import numpy as np
@@ -19,7 +19,7 @@ EPS = 1e-10
 
 
 def u_tree_rgerun(t_phys, rho_phys):
-    """tree potential を、u_tree_exact の代わりに running couplings をそのまま代入して評価。"""
+    """Evaluate the tree potential by substituting the running couplings directly, instead of u_tree_exact."""
     kt = k_IR * np.exp(-t_range + t_phys)
     lamH_t = get_running_quartics(t_phys)
     mhsq_t = get_running_masses(t_phys)
@@ -29,9 +29,10 @@ def u_tree_rgerun(t_phys, rho_phys):
 
 def Pi_H_thermal_mass(t_phys):
     """
-    Higgs/Goldstoneの熱Debye質量補正 (large-T展開のleading order, ~tau_t^2)。
-    rho非依存 (質量項=aHへの一様なシフトのみ、quarticには効かない)。
-    scalar_masses_bare_and_debyeが内部でも使う。
+    Debye thermal-mass correction for Higgs/Goldstone (leading order of the
+    large-T expansion, ~tau_t^2). rho-independent (a uniform shift of the mass
+    term = aH only, no effect on the quartic). Also used internally by
+    scalar_masses_bare_and_debye.
     """
     g1_, g2_, yt_ = get_running_couplings(t_phys)
     lamH_t = get_running_quartics(t_phys)
@@ -44,7 +45,7 @@ def Pi_H_thermal_mass(t_phys):
 
 
 def scalar_masses_bare_and_debye(t_phys, rho_phys):
-    """u_tree_rgerun由来の裸の質量 (bare) と、熱Debye補正込みの質量 (Debye)。"""
+    """Bare masses (from u_tree_rgerun) and masses including the thermal Debye correction (Debye)."""
     kt = k_IR * np.exp(-t_range + t_phys)
 
     lamH_t = get_running_quartics(t_phys)
@@ -90,7 +91,7 @@ def gauge_masses_bare_and_longitudinal_debye(t_phys, rho_phys):
 
 
 def u_CW_zeroT(t_phys, rho_phys):
-    """静的な T=0 1-loop Coleman-Weinberg補正 (mu=k)。renormalization scale = FRGスケールk。"""
+    """Static T=0 1-loop Coleman-Weinberg correction (mu=k). Renormalization scale = FRG scale k."""
     (mG2_b, mH2_b), _ = scalar_masses_bare_and_debye(t_phys, rho_phys)
     (mW_T2, mZ_T2, mA_T2), _, g1, g2, yt, _ = gauge_masses_bare_and_longitudinal_debye(t_phys, rho_phys)
     mt2 = yt ** 2 * rho_phys
@@ -110,8 +111,8 @@ def u_CW_zeroT(t_phys, rho_phys):
 
 def u_thermal_finiteT(t_phys, rho_phys):
     """
-    有限温度1-loop熱ポテンシャル (Arnold-Espinosaの1-loop部分のみ、ring項なし)。
-    J_B/J_Fの引数には裸の(bare)質量を使う。
+    Finite-temperature 1-loop thermal potential (Arnold-Espinosa 1-loop part
+    only, no ring term). Bare masses are used as the arguments of J_B/J_F.
     """
     (mG2_b, mH2_b), _ = scalar_masses_bare_and_debye(t_phys, rho_phys)
     (mW_T2, mZ_T2, mA_T2), _, g1, g2, yt, tau_t = gauge_masses_bare_and_longitudinal_debye(t_phys, rho_phys)
@@ -149,9 +150,11 @@ def _m3(m2):
 
 def u_ring_correction(t_phys, rho_phys):
     """
-    Arnold-Espinosaのring(daisy)補正: ゼロモードの (m^2)^{3/2} を Debye補正済み
-    (effective) 質量の (m^2_eff)^{3/2} に置き換えた差分。frg_pinns_higgs_only/
-    thermal_np.py::u_thermal_finiteT_AE のring項をそのまま移植 (係数・符号とも同一)。
+    Arnold-Espinosa ring (daisy) correction: the difference from replacing the
+    zero-mode (m^2)^{3/2} by the Debye-corrected (effective) mass (m^2_eff)^{3/2}.
+    Ported verbatim from the ring term of
+    frg_pinns_higgs_only/thermal_np.py::u_thermal_finiteT_AE (identical
+    coefficients and signs).
     """
     tau_t = tau_uv * np.exp(-t_phys)
 
@@ -170,16 +173,16 @@ def u_ring_correction(t_phys, rho_phys):
 
 
 def u_thermal_finiteT_ring(t_phys, rho_phys):
-    """1-loop (bare質量, u_thermal_finiteT) + ring/daisy補正 (Arnold-Espinosa完全版)。"""
+    """1-loop (bare masses, u_thermal_finiteT) + ring/daisy correction (full Arnold-Espinosa)."""
     return u_thermal_finiteT(t_phys, rho_phys) + u_ring_correction(t_phys, rho_phys)
 
 
 def set_T_raw(T_raw):
     """
-    perturbation.config_params.tau_uv を T_RAW=T_raw [GeV] に差し替えた値で
-    上書きする。このモジュール自身のグローバル (と、呼び出し元が同様に扱う
-    flow_equation_higgs_only 側のグローバル) の両方を書き換える必要がある点に
-    注意 (どちらも "from ... import tau_uv" で値をコピーしているため)。
+    Overwrite perturbation.config_params.tau_uv with the value corresponding to
+    T_RAW=T_raw [GeV]. Note that both this module's own global and the global on
+    the flow_equation_higgs_only side (which the caller treats the same way) must
+    be rewritten (both copy the value via "from ... import tau_uv").
     """
     global tau_uv
     from perturbation.config_params import k_IR as _k_IR, t as _t

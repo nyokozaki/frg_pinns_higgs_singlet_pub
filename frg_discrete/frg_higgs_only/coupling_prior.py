@@ -1,11 +1,11 @@
 """
-frg_pinns_higgs_only/loss_extensions.py の
-`loss_sign_and_mag_couplings` (符号・大きさのソフト制約) の Higgs-only版を、
-Newton-Krylov リラクゼーション法の"残差"として使える形に翻訳したもの。
+Higgs-only version of `loss_sign_and_mag_couplings` (the soft sign/magnitude
+constraint) from frg_pinns_higgs_only/loss_extensions.py, translated into a form
+usable as the "residual" of a Newton-Krylov relaxation method.
 
-weight_sign, weight_mag > 0 の間は、Newtonが実際に解く方程式は
-"純粋なWetterichフロー R=0" ではなく "Wetterichフロー + このsoft forcing"
-になる (継続法として使う場合は weight を段階的に0まで下げる)。
+While weight_sign, weight_mag > 0, the equation Newton actually solves is not
+"the pure Wetterich flow R=0" but "the Wetterich flow + this soft forcing"
+(when used as a continuation method, decay the weight stepwise to 0).
 """
 
 import numpy as np
@@ -21,17 +21,19 @@ _EPS = 1e-12
 
 def _del_aH_thermal(t_phys, rho=None):
     """
-    F_H_target (質量項のforcingターゲット) に thermal補正を折り込むための
-    "有効aH" 寄与。u_thermal_finiteT (J_B/J_Fの数値積分) をrho方向に微分して
-    局所2次フィットのaH成分を取り出す真面目なやり方は、Jacobian-free
-    Newton-Krylovの1残差評価あたり3回のJ_B積分が乗る上に呼び出し回数も
-    多く、実測で収束が極端に(20倍以上)遅くなったため採用しない。
+    "Effective aH" contribution that folds the thermal correction into
+    F_H_target (the forcing target of the mass term). The honest way -- taking
+    a rho-derivative of u_thermal_finiteT (numerical J_B/J_F integrals) and
+    extracting the aH component of a local quadratic fit -- adds three J_B
+    integrals per residual evaluation of the Jacobian-free Newton-Krylov, on top
+    of a large call count, and was measured to slow convergence extremely
+    (>20x), so it is not used.
 
-    代わりに large-T展開のleading order (Debye熱質量 Pi_H,
-    cw_thermal.Pi_H_thermal_mass) だけを使う。Pi_Hはrho非依存 (質量項への
-    一様シフトのみ、quarticには効かない) なので、この項を加えても
-    F_H_target自体はこれまで通りrho非依存のスカラーのまま — mask_F_Hを
-    array化する必要もない。
+    Instead only the leading order of the large-T expansion is used (the Debye
+    thermal mass Pi_H, cw_thermal.Pi_H_thermal_mass). Pi_H is rho-independent
+    (a uniform shift of the mass term only, no effect on the quartic), so adding
+    this term keeps F_H_target itself a rho-independent scalar as before -- there
+    is no need to make mask_F_H an array.
     """
     return cw_thermal.Pi_H_thermal_mass(t_phys)
 
@@ -76,18 +78,20 @@ def coupling_prior_residual(
     disable_sign_F_H=False,
 ):
     """
-    摂動論の running quartic/mass (Higgs側のみ)に対する符号・大きさの
-    ソフト制約を、格子点ごとの forcing (flow_rhs に加算する項) として評価する。
+    Evaluate the soft sign/magnitude constraint against the perturbative
+    running quartic/mass (Higgs side only) as a per-grid-point forcing term
+    (added to flow_rhs).
 
-    rho_cw_cut: frg_pinns_higgs_only/loss_extensions.py の finite-T branch
-    (`_loss_sign_and_mag_couplings_tval_finiteT`, hp.rho_cw_cut=0.6) と同じ
-    低rho/高rho の役割分担を移植したもの — 質量項(F_H)の sign+magnitude
-    制約は rho < rho_cw_cut のみ、quartic(D_H)のRGE-runターゲットに対する
-    sign+magnitude帯 (c_lower/c_upperバンド) は rho > rho_cw_cut のみに
-    適用する (低rho側でquarticを、高rho側でmassをそれぞれ縛らない、という
-    PINN側の設計をそのまま踏襲)。D_H_NN/lamHに対する定数キャップ
-    (quartic_ratio_cap) は元々rho全域で効く別項なので、この分割とは無関係に
-    そのまま残す。
+    rho_cw_cut: ports the same low-rho/high-rho division of labour as the
+    finite-T branch of frg_pinns_higgs_only/loss_extensions.py
+    (`_loss_sign_and_mag_couplings_tval_finiteT`, hp.rho_cw_cut=0.6) -- the
+    sign+magnitude constraint on the mass term (F_H) applies only for
+    rho < rho_cw_cut, and the sign+magnitude band (c_lower/c_upper) on the
+    RGE-run target of the quartic (D_H) applies only for rho > rho_cw_cut
+    (following the PINN-side design of not constraining the quartic at low rho
+    nor the mass at high rho). The constant cap on D_H_NN/lamH
+    (quartic_ratio_cap) was originally a separate term active over all rho, so
+    it is kept as-is independently of this split.
     """
     if weight_sign == 0.0 and weight_mag == 0.0:
         return 0.0
@@ -120,10 +124,10 @@ def coupling_prior_residual(
     mask_D_H = float(abs(D_H_target / norm_lamH) > d_threshold)
     mask_F_H = float(abs(F_H_target / norm_aH) > f_threshold)
 
-    # 元のdomain-wideゲート (rho_cut=3.0はdomain max 1.75より大きいので事実上1)
+    # original domain-wide gate (rho_cut=3.0 > domain max 1.75, so effectively 1)
     mask_domain = 1.0 / (1.0 + np.exp(-mask_temp * (rho_cut - rho)))
 
-    # rho_cw_cutでの低rho/高rho分割
+    # low-rho/high-rho split at rho_cw_cut
     mask_rho_lo = 1.0 / (1.0 + np.exp(-mask_temp * (rho_cw_cut - rho)))
     mask_rho_hi = 1.0 / (1.0 + np.exp(-mask_temp * (rho - rho_cw_cut)))
 

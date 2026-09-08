@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
 """
-フル方程式 (rloop+eta込み, Higgs-only 1次元rho版) を Newton-Krylov による
-リラクゼーション法で解く。
+Solve the full equation (with rloop+eta, Higgs-only 1D rho version) with a
+Newton-Krylov relaxation method.
 
-singletが存在しないため、質量固有値の混合 (M11,M22,M12,disc,sqrt_disc) は
-構造的に発生しない (flow_equation_higgs_only.py 参照)。frg_discrete4_main
-(singlet版) の README.md に記録されている「Higgs-singlet質量固有値のほぼ
-縮退点での sqrt(disc) 分岐点非平滑性による収束の頭打ち」がこの縮約でも
-再現するかどうかを直接検証するのが目的 (再現しなければ、あの非平滑性が
-本当に主因だったことの傍証になる)。
+Since there is no singlet, mass-eigenvalue mixing (M11,M22,M12,disc,sqrt_disc)
+does not arise structurally (see flow_equation_higgs_only.py). The purpose is to
+test directly whether the "convergence plateau due to the non-smoothness of the
+sqrt(disc) branch point near the near-degenerate Higgs-singlet mass eigenvalues",
+recorded in frg_discrete4_main (singlet version) README.md, is reproduced in this
+reduction too (if it is not, that is circumstantial evidence that that
+non-smoothness really was the main cause).
 
-離散化: 空間は中心差分 (grid_fd_higgs_only.Grid1D, scheme="central")、時間は
-Crank-Nicolson。t=0..t_endの全時刻ステップ (U^1..U^Nt、U^0はUV境界条件で
-固定) をまとめて1つの非線形連立方程式とみなし、scipy.optimize.newton_krylov
-で解く。
+Discretization: space uses a central difference (grid_fd_higgs_only.Grid1D,
+scheme="central"), time uses Crank-Nicolson. All time steps t=0..t_end
+(U^1..U^Nt; U^0 fixed by the UV boundary condition) are treated together as one
+nonlinear system and solved with scipy.optimize.newton_krylov.
 
-使い方:
+Usage:
     python relax_full.py --n-rho 21 --n-t 40
 """
 
@@ -36,10 +37,11 @@ from flow_equation_higgs_only import flow_rhs
 from coupling_prior import coupling_prior_residual
 
 
-# my_networks.py の PINN が非学習の固定バイアス項として使っている粗い
-# Debye熱質量近似 (係数 kh=0.2 も同一)。tau(t)=tau_uv*exp(-t) と各時刻で
-# 正しく再評価される点が、analytic_tree_solution の "tau_UV固定のまま
-# 特性曲線輸送" による近似より物理的に妥当。
+# The crude Debye thermal-mass approximation that the my_networks.py PINN uses
+# as a non-trainable fixed bias term (the coefficient kh=0.2 is identical too).
+# Re-evaluating tau(t)=tau_uv*exp(-t) correctly at each time is more physically
+# sound than analytic_tree_solution's "characteristic transport with tau_UV held
+# fixed" approximation.
 _KH_THERMAL = 0.2
 
 
@@ -50,13 +52,14 @@ def thermal_seed_ansatz(t_phys, rho_phys):
 
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--n-rho", type=int, default=21, help="rho方向の格子点数")
-    p.add_argument("--n-t", type=int, default=40, help="時間方向のステップ数")
+    p.add_argument("--n-rho", type=int, default=21, help="number of grid points in rho")
+    p.add_argument("--n-t", type=int, default=40, help="number of time steps")
     p.add_argument("--rho-max", type=float, default=1.75)
     p.add_argument("--rho-min", type=float, default=0.0,
-                   help="rho方向の下限。singlet除去後はdisc縮退そのものが存在しないため、"
-                        "singlet版と違い分岐点回避の意味は持たない(rho=0軸自体を避けたい"
-                        "場合のみ使う)。")
+                   help="lower bound in rho. After removing the singlet there is no "
+                        "disc degeneracy at all, so unlike the singlet version this "
+                        "has no branch-point-avoidance meaning (use only if you want "
+                        "to avoid the rho=0 axis itself).")
     p.add_argument("--t0", type=float, default=0.0)
     p.add_argument("--t-end", type=float, default=None)
     p.add_argument("--f-tol", type=float, default=1e-8)
@@ -64,41 +67,49 @@ def parse_args():
     p.add_argument("--inner-maxiter", type=int, default=30)
     p.add_argument("--method", type=str, default="lgmres")
     p.add_argument("--scheme", type=str, default="cn", choices=["cn", "be"],
-                   help="cn: Crank-Nicolson (2次精度), be: backward Euler (1次精度, より頑健)")
+                   help="cn: Crank-Nicolson (2nd order), be: backward Euler (1st order, more robust)")
     p.add_argument("--spatial-scheme", type=str, default="central", choices=["central", "central4"],
-                   help="central: 2次精度中心差分。central4: 4次精度中心差分 (5点以上必要)。")
+                   help="central: 2nd-order central difference. central4: 4th-order central difference (needs >= 5 points).")
     p.add_argument("--T-raw", type=float, default=None,
-                   help="有限温度パラメータ T_RAW [GeV] (perturbation/config_params.py の"
-                        "デフォルトは100.0)。指定するとtau_uv = (T_raw/k_IR)*exp(t) を"
-                        "再計算し、flow_equation_higgs_only.tau_uv とこのスクリプト自身の"
-                        "tau_uv (thermal_seed_ansatz用) の両方を上書きする。")
+                   help="finite-temperature parameter T_RAW [GeV] (the default in "
+                        "perturbation/config_params.py is 100.0). When given, tau_uv = "
+                        "(T_raw/k_IR)*exp(t) is recomputed and both "
+                        "flow_equation_higgs_only.tau_uv and this script's own tau_uv "
+                        "(for thermal_seed_ansatz) are overwritten.")
     p.add_argument("--mass-floor", type=float, default=0.0,
-                   help="Higgs/Goldstoneの規格化質量二乗 1+m^2 (mG2,mH2) に対するハード"
-                        "クリップのfloor値。0 (デフォルト) は従来通りEPS floor。")
+                   help="floor value for the hard clip on the normalized mass-squared "
+                        "1+m^2 (mG2,mH2) of Higgs/Goldstone. 0 (default) keeps the "
+                        "previous EPS floor.")
     p.add_argument("--warm-start", type=str, default=None,
-                   help="前回の relax_full.py 出力npz (U_all_raw フィールド) を初期推定値として使う"
-                        "(継続法/continuation用。同じ格子・n_tである必要がある)。")
+                   help="use a previous relax_full.py output npz (U_all_raw field) as "
+                        "the initial guess (for continuation; must be the same grid and "
+                        "n_t).")
     p.add_argument("--coupling-prior-sign-weight", type=float, default=0.0,
-                   help="coupling_prior.coupling_prior_residual の符号制約forcingの重み (0=無効)。")
+                   help="weight of the sign-constraint forcing of coupling_prior.coupling_prior_residual (0=disabled).")
     p.add_argument("--coupling-prior-mag-weight", type=float, default=0.0,
-                   help="大きさ帯制約を模した forcing 項の重み (0=無効)。")
+                   help="weight of the forcing term emulating the magnitude-band constraint (0=disabled).")
     p.add_argument("--coupling-prior-c-lower", type=float, default=0.1,
-                   help="coupling_prior_residual の質量項magnitude帯の下限係数 "
-                        "(F_H_NN >= c_lower*|F_H_target| を要求)。PINN側hyperparams.c_mag_lower"
-                        "に相当。coupling-prior-mag-weight=0のときは無効。")
+                   help="lower coefficient of the mass-term magnitude band of "
+                        "coupling_prior_residual (requires F_H_NN >= c_lower*|F_H_target|). "
+                        "Corresponds to hyperparams.c_mag_lower on the PINN side. "
+                        "Disabled when coupling-prior-mag-weight=0.")
     p.add_argument("--coupling-prior-c-upper", type=float, default=3.0,
-                   help="coupling_prior_residual の質量項magnitude帯の上限係数。"
-                        "PINN側hyperparams.c_mag_upperに相当。")
+                   help="upper coefficient of the mass-term magnitude band of "
+                        "coupling_prior_residual. Corresponds to hyperparams.c_mag_upper "
+                        "on the PINN side.")
     p.add_argument("--coupling-prior-rho-cw-cut", type=float, default=0.6,
-                   help="coupling_prior_residual の低rho/高rho分割点。rho<この値では"
-                        "質量項(F_H)のみ、rho>この値ではquartic(D_H)のRGE-runターゲット"
-                        "帯のみを制約する。PINN側hyperparams.rho_cw_cut(=0.6)に相当。")
+                   help="low-rho/high-rho split point of coupling_prior_residual. For "
+                        "rho below this value only the mass term (F_H) is constrained, "
+                        "for rho above it only the RGE-run target band of the quartic "
+                        "(D_H). Corresponds to hyperparams.rho_cw_cut(=0.6) on the PINN "
+                        "side.")
     p.add_argument("--disable-sign-f-h", action="store_true",
-                   help="coupling prior の sign_pen から rho方向のmass-term (F_H) の"
-                        "sign hinge penaltyだけを外す。")
+                   help="remove only the sign hinge penalty of the rho-direction "
+                        "mass term (F_H) from the coupling prior's sign_pen.")
     p.add_argument("--coupling-prior-anneal-steps", type=int, default=0,
-                   help="0: 指定した重みのまま1回だけ解く。N>0: N段階に分けて重みを幾何級数的に"
-                        "0まで下げながら逐次warm-start再解 (継続法)。")
+                   help="0: solve once with the given weight. N>0: re-solve with "
+                        "warm start in N stages, decaying the weight geometrically to 0 "
+                        "(continuation method).")
     p.add_argument("--out", type=str, default="results/relax_full.npz")
     return p.parse_args()
 
@@ -129,8 +140,9 @@ def main():
     print(f"Grid: {n_rho} spatial (rho), {args.n_t} time steps (t: {args.t0} -> {t_end}), "
           f"mass_floor={args.mass_floor}, rho_min={args.rho_min}")
 
-    # --- warm start: tree部分は厳密解 (u_tree_exact)、thermal部分はPINNの
-    #     非学習固定バイアス項と同じ粗いDebye近似 (thermal_seed_ansatz)。
+    # --- warm start: the tree part is the exact solution (u_tree_exact), the
+    #     thermal part is the same crude Debye approximation as the PINN's
+    #     non-trainable fixed bias term (thermal_seed_ansatz).
     U_tree_all = np.stack([
         u_tree_exact(tn, grid.RHO) + thermal_seed_ansatz(tn, grid.RHO)
         for tn in t_grid
@@ -249,7 +261,7 @@ def main():
         args.out,
         rho=grid.rho, t=t_grid,
         U_final=U_final_norm, U_all=U_all - origin,
-        U_all_raw=U_all,  # 継続法 (--warm-start) 用。原点シフトしていない生の解。
+        U_all_raw=U_all,  # for continuation (--warm-start). The raw solution, not origin-shifted.
         mass_floor=args.mass_floor, rho_min=args.rho_min,
         T_raw=(args.T_raw if args.T_raw is not None else 100.0),
         success=success, message=message,

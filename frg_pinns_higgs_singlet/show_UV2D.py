@@ -23,7 +23,7 @@ set_seed(1234)
 
 
 # ============================================================
-# UV parameters / running couplings (新学習コードと完全一致版)
+# UV parameters / running couplings (exactly matching the new training code)
 # ============================================================
 
 from perturbation.config_params import tau_uv, finite_T, k_IR, t_range, fixed_tau
@@ -135,17 +135,18 @@ def stitched_grid_matched_2d(
     dsigma=0.350,
     rho_overlap=0.02,
     sigma_overlap=0.02,
-    n_points=40 # 1ブロックあたりの解像度
+    n_points=40 # resolution per block
 ):
     """
-    2Dグリッド上の全ブロックのモデルを読み込み、境界での連続性を保証するシフトを計算して
-    1つの大きな2次元配列 (RHO, SIGMA, U_PRED) に統合します。
+    Load the models of all blocks on the 2D grid, compute the shifts that
+    guarantee continuity at the boundaries, and merge them into one large 2D
+    array (RHO, SIGMA, U_PRED).
     """
     block_id, t0, t1 = get_time_block_info(t_val)
     shifts = np.zeros((n_rho_blocks, n_sigma_blocks))
     models = [[None]*n_sigma_blocks for _ in range(n_rho_blocks)]
 
-    # 1. 各ブロックのモデルをロード
+    # 1. load the model of each block
     for irho in range(n_rho_blocks):
         rho_start = irho * drho
         rho_end = (irho + 1) * drho + (rho_overlap if irho < n_rho_blocks - 1 else 0.0)
@@ -158,28 +159,28 @@ def stitched_grid_matched_2d(
                 file_model, t0, t1, rho_start, rho_end, sigma_start, sigma_end
             )
 
-    # 2. 境界での連続性を保つためのシフト(定数項)を計算
-    # アンカー条件: u(t, rho=0, sigma=0) = 0
+    # 2. compute the shift (constant term) that keeps continuity at the boundaries
+    # anchor condition: u(t, rho=0, sigma=0) = 0
     u_anchor = eval_model_point(models[0][0], t_val, rho_val=0.0, sigma_val=0.0)
     shifts[0, 0] = -u_anchor
 
-    # rho軸に沿ったシフト計算 (sigma=0)
+    # compute the shift along the rho axis (sigma=0)
     for irho in range(1, n_rho_blocks):
         rho_bound = irho * drho
         left_val = eval_model_point(models[irho-1][0], t_val, rho_bound, 0.0) + shifts[irho-1, 0]
         right_val = eval_model_point(models[irho][0], t_val, rho_bound, 0.0)
         shifts[irho, 0] = left_val - right_val
 
-    # 各rhoブロックごとに、sigma軸へ上に向かってシフト計算
+    # for each rho block, compute the shift going up along the sigma axis
     for irho in range(n_rho_blocks):
-        rho_mid = irho * drho + drho / 2.0  # ブロック中央のrhoで評価
+        rho_mid = irho * drho + drho / 2.0  # evaluate at the rho of the block center
         for isigma in range(1, n_sigma_blocks):
             sigma_bound = isigma * dsigma
             bot_val = eval_model_point(models[irho][isigma-1], t_val, rho_mid, sigma_bound) + shifts[irho, isigma-1]
             top_val = eval_model_point(models[irho][isigma], t_val, rho_mid, sigma_bound)
             shifts[irho, isigma] = bot_val - top_val
 
-    # 3. 描画用のグローバルグリッドを作成 (オーバーラップ領域は上書きする前提で綺麗なメッシュを作る)
+    # 3. build the global grid for plotting (a clean mesh, assuming overlap regions get overwritten)
     rho_global = np.linspace(0, n_rho_blocks * drho, n_rho_blocks * n_points)
     sigma_global = np.linspace(0, n_sigma_blocks * dsigma, n_sigma_blocks * n_points)
     RHO, SIGMA = np.meshgrid(rho_global, sigma_global, indexing='ij')
@@ -187,13 +188,13 @@ def stitched_grid_matched_2d(
     U_PRED = np.zeros_like(RHO)
     U_TREE = np.zeros_like(RHO)
 
-    # 各ブロックの担当領域に値を埋めていく
+    # fill in the values over each block's region
     for irho in range(n_rho_blocks):
         for isigma in range(n_sigma_blocks):
             r_mask = (rho_global >= irho * drho) & (rho_global <= (irho + 1) * drho)
             s_mask = (sigma_global >= isigma * dsigma) & (sigma_global <= (isigma + 1) * dsigma)
             
-            # 末尾の境界落ちをふせぐ
+            # prevent dropping the trailing boundary
             if irho == n_rho_blocks - 1: r_mask[-1] = True
             if isigma == n_sigma_blocks - 1: s_mask[-1] = True
 
@@ -205,7 +206,7 @@ def stitched_grid_matched_2d(
 
             r_sub, s_sub = np.meshgrid(rho_global[idx_r], sigma_global[idx_s], indexing='ij')
             
-            # PyTorchで一括評価
+            # evaluate all at once with PyTorch
             r_t = my_to(r_sub.flatten().reshape(-1, 1))
             s_t = my_to(s_sub.flatten().reshape(-1, 1))
             t_t = my_to(np.full((len(r_t), 1), t_val))
@@ -215,7 +216,7 @@ def stitched_grid_matched_2d(
             rho_in = model.scale_rho(r_t)
             sigma_in = model.scale_sigma(s_t)
 
-            from my_networks import u_tree_exact # 念のため
+            from my_networks import u_tree_exact # just in case
             with torch.no_grad():
                 u_pred_flat = model(t_in, rho_in, sigma_in)[0].detach().cpu().numpy().flatten()
                 u_tree_flat = u_tree_exact(t_t, r_t, s_t).detach().cpu().numpy().flatten()
@@ -223,7 +224,7 @@ def stitched_grid_matched_2d(
             U_PRED[np.ix_(idx_r, idx_s)] = u_pred_flat.reshape(len(idx_r), len(idx_s)) + shifts[irho, isigma]
             U_TREE[np.ix_(idx_r, idx_s)] = u_tree_flat.reshape(len(idx_r), len(idx_s))
 
-            del model # メモリ解放
+            del model # free memory
             
     gc.collect()
     if torch.cuda.is_available():
@@ -237,7 +238,7 @@ def stitched_grid_matched_2d(
 # ============================================================
 
 def plot_u_2d_colormap(t_vals=[0.0, -1.0, -2.0]):
-    """特定の時間 t における U(rho, sigma) の2次元カラーマップを描画"""
+    """Plot a 2D color map of U(rho, sigma) at a specific time t."""
     n_plots = len(t_vals)
     fig, axes = plt.subplots(1, n_plots, figsize=(6 * n_plots, 5), sharey=True)
     if n_plots == 1: axes = [axes]
@@ -246,13 +247,13 @@ def plot_u_2d_colormap(t_vals=[0.0, -1.0, -2.0]):
         RHO, SIGMA, U_TREE, U_PRED, shifts = stitched_grid_matched_2d(t_val)
         
         ax = axes[i]
-        # NNの予測値をプロット
+        # plot the NN prediction
         pcm = ax.pcolormesh(RHO, SIGMA, U_PRED, shading='auto', cmap='viridis')
         fig.colorbar(pcm, ax=ax, label='U_pred')
         
         _dx = 0.350
         _xtot = 0.350*5
-        # ブロックの境界線を描画
+        # draw the block boundary lines
         for rb in np.arange(_dx, _xtot, _dx):
             ax.axvline(rb, color='white', lw=1.0, ls=':', alpha=0.7)
         for sb in np.arange(_dx, _xtot, _dx):
@@ -275,19 +276,19 @@ def plot_u_2d_colormap(t_vals=[0.0, -1.0, -2.0]):
 # ============================================================
 
 def plot_u_1d_cuts(t_vals=[0.0, -1.0, -2.0]):
-    """2Dの予測結果から特定の断面（sigma=0固定、rho=0固定など）を抽出して1Dプロット"""
-    import thermal_np as thermal # 1D同様にRGE/finiteTの比較用
+    """Extract a specific slice (sigma=0 fixed, rho=0 fixed, etc.) from the 2D prediction and make a 1D plot."""
+    import thermal_np as thermal # for the RGE/finiteT comparison, same as in 1D
 
     fig, axes = plt.subplots(2, len(t_vals), figsize=(6 * len(t_vals), 8))
-    if len(t_vals) == 1: axes = axes[:, None] # 形状を合わせる
+    if len(t_vals) == 1: axes = axes[:, None] # match the shape
 
     for i, t_val in enumerate(t_vals):
-        # 2Dグリッドデータを取得
+        # get the 2D grid data
         RHO, SIGMA, U_TREE, U_PRED, _ = stitched_grid_matched_2d(t_val)
         
         # --- (A) Cut along sigma = 0 ---
         ax_rho = axes[0, i]
-        # sigma_global の0番目インデックスを抽出
+        # extract index 0 of sigma_global
         idx_sigma0 = 0 
         rho_1d = RHO[:, idx_sigma0]
         u_pred_1d_rho = U_PRED[:, idx_sigma0]
@@ -296,7 +297,7 @@ def plot_u_1d_cuts(t_vals=[0.0, -1.0, -2.0]):
         sigma_np_zeros = np.zeros_like(rho_1d)
         t_np_rho = np.full_like(rho_1d, t_val)
 
-        # リング項や摂動の計算 (1Dと同じ処理)
+        # compute the ring term and perturbation (same as in 1D)
         if finite_T:
             from thermal_functions import get_u_ring
             t_tensor = my_to(t_np_rho)
@@ -328,7 +329,7 @@ def plot_u_1d_cuts(t_vals=[0.0, -1.0, -2.0]):
 
         # --- (B) Cut along rho = 0 ---
         ax_sig = axes[1, i]
-        # rho_global の0番目インデックスを抽出
+        # extract index 0 of rho_global
         idx_rho0 = 0
         sigma_1d = SIGMA[idx_rho0, :]
         u_pred_1d_sig = U_PRED[idx_rho0, :]
@@ -337,9 +338,9 @@ def plot_u_1d_cuts(t_vals=[0.0, -1.0, -2.0]):
         rho_np_zeros = np.zeros_like(sigma_1d)
         t_np_sig = np.full_like(sigma_1d, t_val)
 
-        # リング項は rho=0 なので相殺されて基本ゼロになりますが、一応形式的に
+        # the ring term is basically zero at rho=0 because it cancels, but include it formally anyway
         if finite_T:
-            # rho=0ならU_ring(0) - U_ring(0) = 0なのでスキップしても問題ありません
+            # at rho=0, U_ring(0) - U_ring(0) = 0, so it is fine to skip
             pass
         
         u_pert_sig = thermal.u_pert(t_np_sig, rho_np_zeros, sigma_1d) - thermal.u_pert(t_np_sig, rho_np_zeros, np.zeros_like(sigma_1d))
@@ -370,9 +371,10 @@ def plot_u_1d_cuts(t_vals=[0.0, -1.0, -2.0]):
 # ============================================================
 def plot_potential_vacuum_line(t_val=-2.0, n_points=40, n_line=200):
     """
-    NN(+gauge/top ring)予測の2D stitched gridから、sigma=0上のrho方向の
-    真空 (rho_v, 0) と rho=0上のsigma方向の真空 (0, sigma_vs) を探し、
-    その2点を直線でつないだ経路に沿ったポテンシャルを描画する。
+    From the 2D stitched grid of the NN(+gauge/top ring) prediction, find the
+    vacuum in the rho direction on sigma=0 (rho_v, 0) and the vacuum in the sigma
+    direction on rho=0 (0, sigma_vs), and plot the potential along the
+    straight-line path connecting the two points.
     """
     import thermal_np as thermal
     from scipy.interpolate import RegularGridInterpolator
@@ -442,18 +444,19 @@ def plot_potential_vacuum_line(t_val=-2.0, n_points=40, n_line=200):
 # Helper: Block Indexing
 # ============================================================
 def get_grid_block_index(val, dval=0.350, max_blocks=5):
-    """値から対応するブロックインデックスを取得 (0 ~ max_blocks-1)"""
+    """Get the corresponding block index from a value (0 to max_blocks-1)."""
     idx = int(np.floor(val / dval))
     return max(0, min(idx, max_blocks - 1))
 
 # ============================================================
 # Core: Local Residual Computation
-# (1Dコードの内側ループを共通関数として切り出し)
+# (the inner loop of the 1D code factored out as a shared function)
 # ============================================================
 def compute_local_residual(model, t_val, rho_val, sigma_val, LPAp=1.0):
     """
-    1点 (t, rho, sigma) における偏微分とPDE残差をAutogradを用いて計算する関数。
-    元の残差計算ロジックと全く同じ処理を行います。
+    Function that computes the partial derivatives and the PDE residual at one
+    point (t, rho, sigma) using autograd. Does exactly the same processing as the
+    original residual computation logic.
     """
     t_grid = my_to([[t_val]])
     rho_grid = my_to([[rho_val]])
@@ -575,13 +578,13 @@ def compute_local_residual(model, t_val, rho_val, sigma_val, LPAp=1.0):
 # Plot 1: 2D Plane Residual Map (rho vs sigma at fixed t)
 # ============================================================
 def plot_residual_2d_plane(t_val, rho_max=1.75, sigma_max=1.75, n_pts=61):
-    """特定の時間 t における (rho, sigma) 平面全体の残差マップを描画"""
+    """Plot the residual map over the whole (rho, sigma) plane at a specific time t."""
     block_id, t0, t1 = get_time_block_info(t_val)
     
     n_rho_blocks, n_sigma_blocks = 5, 5
     drho, dsigma = 0.350, 0.350
     
-    # 該当ブロックの全モデルをロード
+    # load all models of the relevant block
     models = [[None]*n_sigma_blocks for _ in range(n_rho_blocks)]
     for irho in range(n_rho_blocks):
         for isigma in range(n_sigma_blocks):
@@ -596,7 +599,7 @@ def plot_residual_2d_plane(t_val, rho_max=1.75, sigma_max=1.75, n_pts=61):
     res_np = np.zeros((n_pts, n_pts))
     loop_np = np.zeros((n_pts, n_pts))
 
-    # 各グリッドポイントの評価
+    # evaluate each grid point
     for ir, r_val in enumerate(rho_vals):
         irho = get_grid_block_index(r_val, drho, n_rho_blocks)
         for isig, s_val in enumerate(sigma_vals):
@@ -650,7 +653,7 @@ def plot_residual_2d_plane(t_val, rho_max=1.75, sigma_max=1.75, n_pts=61):
 # Plot 2: Time-Evolution Slice Residual Map (t vs rho at fixed sigma)
 # ============================================================
 def plot_residual_t_rho_slice(sigma_fixed=0.0, t0=-2.0, t1=0.0, rho_max=1.75, Nt=41, Nrho=61):
-    """特定の sigma 面における (t, rho) 断面の残差マップ（1D版の拡張）"""
+    """Residual map of the (t, rho) slice on a specific sigma plane (an extension of the 1D version)."""
     t_vals = np.linspace(t0, t1, Nt)
     rho_vals = np.linspace(0.0, rho_max, Nrho)
     
@@ -662,13 +665,13 @@ def plot_residual_t_rho_slice(sigma_fixed=0.0, t0=-2.0, t1=0.0, rho_max=1.75, Nt
     res_np = np.zeros((Nt, Nrho))
     loop_np = np.zeros((Nt, Nrho))
     
-    # t, rho のループ
+    # loop over t, rho
     for it, t_val in enumerate(t_vals):
         block_id, tb_start, tb_end = get_time_block_info(t_val)
         for ir, r_val in enumerate(rho_vals):
             irho = get_grid_block_index(r_val, drho, n_rho_blocks)
             
-            # 必要なモデルのファイルパスからロード
+            # load from the file path of the required model
             r_end = (irho + 1) * drho + (0.02 if irho < n_rho_blocks - 1 else 0.0)
             s_end = (isigma + 1) * dsigma + (0.02 if isigma < n_sigma_blocks - 1 else 0.0)
             f_model = f"./data_UV_2D/model_higgs_singlet_u_rho{irho}_sig{isigma}_block{block_id}.pt"
@@ -679,7 +682,7 @@ def plot_residual_t_rho_slice(sigma_fixed=0.0, t0=-2.0, t1=0.0, rho_max=1.75, Nt
             res_np[it, ir] = res_val
             loop_np[it, ir] = loop_val
             
-            # メモリ節約
+            # save memory
             del model
             
     abs_res = np.abs(res_np)
@@ -707,29 +710,29 @@ def plot_residual_t_rho_slice(sigma_fixed=0.0, t0=-2.0, t1=0.0, rho_max=1.75, Nt
     for ax in axes:
         ax.set_xlabel('rho')
         ax.set_ylabel('t')
-        ax.axhline(-1.0, color='white', lw=1.0, ls='--', alpha=0.8) # 時間ブロック境界
+        ax.axhline(-1.0, color='white', lw=1.0, ls='--', alpha=0.8) # time block boundary
         _dx = 0.350
         _xtot = 0.350*5
         for b in np.arange(_dx,_xtot,_dx):
-            ax.axvline(b, color='white', lw=1.0, ls=':', alpha=0.5) # rhoブロック境界
+            ax.axvline(b, color='white', lw=1.0, ls=':', alpha=0.5) # rho block boundary
 
     fig.tight_layout()
     plt.show()
 
 # ============================================================
-# テスト実行例
+# example test run
 # ============================================================
 if __name__ == "__main__":
-    # 1. 空間 2D 平面 (rho, sigma) での境界の滑らかさをチェック
-    # 2Dカラーマップの描画
+    # 1. check the smoothness of the boundaries on the 2D spatial plane (rho, sigma)
+    # draw the 2D color map
     plot_u_2d_colormap(t_vals=[0.0, -1.0, -2.0])
     
-    # 解析解との1D比較プロット
+    # 1D comparison plot against the analytic solution
     plot_u_1d_cuts(t_vals=[0.0, -1.0, -2.0])
 
     #plot_residual_2d_plane(t_val=-0.5, n_pts=61)
     #plot_residual_2d_plane(t_val=-1.5, n_pts=61)
     
-    # 2. 時間発展 (t, rho) での残差推移をチェック (sigma=0.0 と sigma=0.5など)
+    # 2. check how the residual evolves in time (t, rho) (e.g. sigma=0.0 and sigma=0.5)
     plot_residual_t_rho_slice(sigma_fixed=0.0)
     plot_residual_t_rho_slice(sigma_fixed=0.350)

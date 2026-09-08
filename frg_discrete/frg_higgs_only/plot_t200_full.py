@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-8-curve slice comparison of the Higgs-only relaxation benchmark at
-T_raw = 200 GeV (the Higgs-only relaxation figure of the paper, Sec. 4.3).
+8-curve slice comparison of the relaxation benchmark at T_raw = 200 GeV
+(the relax_benchmark figure of the paper, Sec. 5).
 
-8曲線の対応 (原稿の enumerate (1)-(8) と同じ):
-  (1) numerical (relax_tree)              -> results/case_a.npz (T非依存)
-  (2) tree (UV-matched quartics)          -> u_tree_exact (T非依存)
-  (3) RGE-run tree + CW                   -> cw_thermal.u_CW_zeroT (T非依存)
-  (4) RGE-run tree + CW + thermal         -> cw_thermal.u_thermal_finiteT (T_raw=200で再評価)
+The 8 curves:
+  (1) numerical (relax_tree)              -> results/case_a.npz (T-independent)
+  (2) tree (UV-matched quartics)          -> u_tree_exact (T-independent)
+  (3) RGE-run tree + CW                   -> cw_thermal.u_CW_zeroT (T-independent)
+  (4) RGE-run tree + CW + thermal         -> cw_thermal.u_thermal_finiteT (re-evaluated at T_raw=200)
   (5) full flow eq. relaxation            -> results/full_n21_Traw200_disccut1e-2.npz
   (6) full flow eq. + coupling prior      -> results/full_n21_Traw200_prior_w015_006.npz
   (7) full flow eq., central4             -> results/full_n21_Traw200_disccut1e-2_central4.npz

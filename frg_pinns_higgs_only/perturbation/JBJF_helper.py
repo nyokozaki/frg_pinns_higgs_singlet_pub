@@ -3,26 +3,26 @@ import torch
 
 
 # ============================================================
-# 有限温度ヘルパー: 高精度化された Thermal integrals J_B, J_F (特異点回避版)
+# Finite-temperature helper: high-precision thermal integrals J_B, J_F (singularity-avoiding version)
 # ============================================================
 def J_Bnp(y2, deg=100, x_max=20.0, epsilon=1e-6, alpha=1.0):
     y2 = np.asarray(y2)
     shape_orig = y2.shape
     y2_flat = y2.ravel()
 
-    # ガウス・ルジャンドル求積法の分点と重み
+    # Gauss-Legendre quadrature nodes and weights
     t, w = np.polynomial.legendre.leggauss(deg)
     t = t.reshape(1, -1)
     w = w.reshape(1, -1)
 
     result = np.zeros_like(y2_flat, dtype=float)
 
-    # 正負のマスクを作成
+    # build the positive/negative masks
     mask_pos = y2_flat >= 0
     mask_neg = ~mask_pos
 
     # ==========================================
-    # Case 1: y2 >= 0 (従来の積分範囲 0 to x_max)
+    # Case 1: y2 >= 0 (the usual integration range 0 to x_max)
     # ==========================================
     if np.any(mask_pos):
         y2_p = y2_flat[mask_pos].reshape(-1, 1)
@@ -41,13 +41,13 @@ def J_Bnp(y2, deg=100, x_max=20.0, epsilon=1e-6, alpha=1.0):
         result[mask_pos] = np.sum(integrand * weights, axis=1)
 
     # ==========================================
-    # Case 2: y2 < 0 (積分範囲を2つに分割)
+    # Case 2: y2 < 0 (split the integration range in two)
     # ==========================================
     if np.any(mask_neg):
         y2_n = y2_flat[mask_neg].reshape(-1, 1)
-        xc = np.sqrt(-y2_n) # E=0 となる特異点
+        xc = np.sqrt(-y2_n) # the singular point where E=0
 
-        # --- 範囲1: 0 から xc - epsilon ---
+        # --- range 1: from 0 to xc - epsilon ---
         x_upper = np.maximum(0.0, xc - epsilon)
         u_min1, u_max1 = 0.0, np.sqrt(x_upper)
         
@@ -56,15 +56,15 @@ def J_Bnp(y2, deg=100, x_max=20.0, epsilon=1e-6, alpha=1.0):
         x1 = u1**2
         weights1 = weights_u1 * (2.0 * u1)
 
-        E2_1 = x1**2 + y2_n  # 負の値
+        E2_1 = x1**2 + y2_n  # negative value
         abs_E = np.sqrt(np.maximum(-E2_1, 1e-12))
         
-        # ボソンの厳密な実部計算: 0.5 * ln(2(1 - cos|E|))
+        # exact real part for bosons: 0.5 * ln(2(1 - cos|E|))
         val_B = np.maximum(2.0 * (1.0 - np.cos(abs_E)), 1e-12)
         integrand1 = x1**2 * 0.5 * np.log(val_B)
         int1 = np.sum(integrand1 * weights1, axis=1)
 
-        # --- 範囲2: xc + alpha*epsilon から x_max ---
+        # --- range 2: from xc + alpha*epsilon to x_max ---
         x_lower = np.minimum(xc + alpha * epsilon, x_max)
         u_min2, u_max2 = np.sqrt(x_lower), np.sqrt(x_max)
         
@@ -79,7 +79,7 @@ def J_Bnp(y2, deg=100, x_max=20.0, epsilon=1e-6, alpha=1.0):
         integrand2 = x2**2 * np.log1p(-np.exp(-E2_real))
         int2 = np.sum(integrand2 * weights2, axis=1)
 
-        # 範囲1と範囲2を合算
+        # sum range 1 and range 2
         result[mask_neg] = int1 + int2
 
     return result.reshape(shape_orig)
@@ -124,7 +124,7 @@ def J_Fnp(y2, deg=100, x_max=20.0, epsilon=1e-6, alpha=1.0):
         y2_n = y2_flat[mask_neg].reshape(-1, 1)
         xc = np.sqrt(-y2_n)
 
-        # --- 範囲1: 0 から xc - epsilon ---
+        # --- range 1: from 0 to xc - epsilon ---
         x_upper = np.maximum(0.0, xc - epsilon)
         u_min1, u_max1 = 0.0, np.sqrt(x_upper)
         
@@ -136,12 +136,12 @@ def J_Fnp(y2, deg=100, x_max=20.0, epsilon=1e-6, alpha=1.0):
         E2_1 = x1**2 + y2_n
         abs_E = np.sqrt(np.maximum(-E2_1, 1e-12))
         
-        # フェルミオンの厳密な実部計算: 0.5 * ln(2(1 + cos|E|))
+        # exact real part for fermions: 0.5 * ln(2(1 + cos|E|))
         val_F = np.maximum(2.0 * (1.0 + np.cos(abs_E)), 1e-12)
         integrand1 = x1**2 * 0.5 * np.log(val_F)
         int1 = np.sum(integrand1 * weights1, axis=1)
 
-        # --- 範囲2: xc + alpha*epsilon から x_max ---
+        # --- range 2: from xc + alpha*epsilon to x_max ---
         x_lower = np.minimum(xc + alpha * epsilon, x_max)
         u_min2, u_max2 = np.sqrt(x_lower), np.sqrt(x_max)
         

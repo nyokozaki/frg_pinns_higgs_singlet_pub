@@ -62,7 +62,7 @@ def train_one_block_joint(
     w_bc=1.0,
     w_overlap=1.0,
     w_weak=1.0,       
-    w_consist=1.0,  # [追加] Consistency Lossの重み
+    w_consist=1.0,  # weight of the consistency loss
     w_sign=1000.0,
     save_name_model="model.pt",
     save_name_hist="history.npy",
@@ -109,7 +109,7 @@ def train_one_block_joint(
     for nt in range(N_t + 1):
         for nr in range(N_r + 1):
             for ns in range(N_s + 1):
-                # (0,0,0) を入れるかどうかは好み
+                # whether to include (0,0,0) is a matter of taste
                 if (nt, nr, ns) != (0, 0, 0):
                     vpinn_configs.append((nt, nr, ns))
 
@@ -248,7 +248,7 @@ def train_one_block_joint(
     #hp.w_sign = 1.0
     
 
-    # 規定エポック終了時点の lr を固定
+    # freeze the lr at the value it had when the scheduled epochs finished
     final_lr = optimizer.param_groups[0]["lr"]
     for g in optimizer.param_groups:
         g["lr"] = final_lr
@@ -271,7 +271,7 @@ def train_one_block_joint(
             print(f"  Extra block {iblock+1} / {max_extra_blocks}")
 
             for i in range(extra_block_size):
-                # epoch 比率はログ用途だけ
+                # the epoch ratio is for logging only
                 _epoch_ratio = (n_epochs + iblock * extra_block_size + i) / (
                     n_epochs + max_extra_blocks * extra_block_size
                 )
@@ -279,12 +279,12 @@ def train_one_block_joint(
                 model.train()
                 optimizer.zero_grad()
 
-                lr = optimizer.param_groups[0]["lr"]  # 固定だがログには出す
+                lr = optimizer.param_groups[0]["lr"]  # fixed, but still logged
 
                 loss, L_pde, L_consist, L_bc, L_overlap, L_sign, L_mag, L_weak = compute_losses()
                 loss.backward()
                 optimizer.step()
-                # scheduler.step() は呼ばない
+                # do not call scheduler.step()
 
                 history.append([
                     loss.item(),
@@ -297,7 +297,7 @@ def train_one_block_joint(
                     L_weak.item()
                 ])
 
-            # ブロックを100ステップ回し切ったあとで評価
+            # evaluate after running the block for the full 100 steps
             if hp.w_sign == 0:
                 loss_sm = L_mag.item()
             else:
@@ -497,7 +497,7 @@ def train_rho_window_joint(
 
 
 # ============================================================
-# main loop (分割実行対応版)
+# main loop (supports split execution)
 # ============================================================
 def train(n_epochs=1000, rho_blocks=None):
     all_hist = {}
@@ -509,13 +509,13 @@ def train(n_epochs=1000, rho_blocks=None):
     d_rho = 0.350
     rho_overlap = 0.02
 
-    # 指定がない場合は全ブロックを実行 [0, 1, 2, 3, 4]
+    # run all blocks [0, 1, 2, 3, 4] if none specified
     if rho_blocks is None:
         rho_blocks = list(range(n_rho_blocks))
 
     prev_block_models = [None, None]
 
-    # --- [追加] 途中からスタートする場合、直前(irho - 1)のモデルをロードする ---
+    # --- when starting partway through, load the previous (irho - 1) model ---
     first_rho = rho_blocks[0]
     if first_rho > 0:
         prev_rho = first_rho - 1
@@ -526,7 +526,7 @@ def train(n_epochs=1000, rho_blocks=None):
             prev_rho_end = (prev_rho + 1) * d_rho
 
           
-        print(f"--- 途中再開: rho block {prev_rho} の学習済みモデルをロードします ---")
+        print(f"--- resuming partway: loading the trained model of rho block {prev_rho} ---")
         t_blocks = [(-1.0, 0.0), (-2.0, -1.0)]
 
         for iblock, (t0, t1) in enumerate(t_blocks, start=1):
@@ -539,16 +539,16 @@ def train(n_epochs=1000, rho_blocks=None):
                     rho0=prev_rho_start, rho1=prev_rho_end,
                     sigma0=0.0, sigma1=0.350
                 )
-                print("--- ロード完了 ---")    
+                print("--- load complete ---")    
             else:
-                print(f"前ブロックのモデルが見つかりません。irho={prev_rho} はまだ学習されていません: {file_model}")
+                print(f"previous block model not found. irho={prev_rho} has not been trained yet: {file_model}")
 
     # -------------------------------------------------------------------------
 
     for irho in rho_blocks:
-        # 指定された範囲外のブロック番号が渡された場合の安全策
+        # safeguard for when a block index outside the specified range is passed
         if irho >= n_rho_blocks:
-            print(f"Warning: irho={irho} は最大ブロック数({n_rho_blocks})を超えています。スキップします。")
+            print(f"Warning: irho={irho} exceeds the maximum number of blocks ({n_rho_blocks}). Skipping.")
             continue
 
         rho_start = irho * d_rho
@@ -583,7 +583,7 @@ def train(n_epochs=1000, rho_blocks=None):
 
         all_hist[irho] = hist_list
 
-        # 次のループ(右隣のブロック)のためにモデルを更新
+        # update the model for the next loop (the right-neighbor block)
         prev_block_models = trained_models
         
     return all_hist
@@ -610,16 +610,16 @@ def train_one_block_joint_2d(
     base_lr,
     loop=1.0,
     model_prev=None,
-    model_left=None,       # rho方向の隣接モデル
+    model_left=None,       # neighboring model in the rho direction
     rho_ov_min=None,
     rho_ov_max=None,
-    model_bottom=None,     # sigma方向の隣接モデル
+    model_bottom=None,     # neighboring model in the sigma direction
     sigma_ov_min=None,
     sigma_ov_max=None,
-    model_right=None,      # rho方向の右隣接モデル(2周目以降で使用)
+    model_right=None,      # right-neighbor model in the rho direction (used from round 2 on)
     rho_ov_min2=None,
     rho_ov_max2=None,
-    model_top=None,        # sigma方向の上隣接モデル(2周目以降で使用)
+    model_top=None,        # top-neighbor model in the sigma direction (used from round 2 on)
     sigma_ov_min2=None,
     sigma_ov_max2=None,
     rho_min=0.0,
@@ -699,7 +699,7 @@ def train_one_block_joint_2d(
         else:
             L_bc = loss_bc(model, model_prev, n_bc)
 
-        # ====== 2D Overlap Loss (1階微分のマッチング) ======
+        # ====== 2D Overlap Loss (matching the first derivatives) ======
         L_overlap = torch.tensor(0.0, device=device)
         
         # Left (rho) Overlap
@@ -714,13 +714,13 @@ def train_one_block_joint_2d(
                 model_bottom, model, rho_min, rho_max, t_min, t_max, sigma_ov_min, sigma_ov_max, n_interface
             )
 
-        # Right (rho) Overlap (2周目以降)
+        # Right (rho) Overlap (round 2 on)
         if model_right is not None and rho_ov_min2 is not None and rho_ov_max2 is not None:
             L_overlap += loss_interface_overlap(
                 model, model_right, rho_ov_min2, rho_ov_max2, t_min, t_max, sigma_min, sigma_max, n_interface
             )
 
-        # Top (sigma) Overlap (2周目以降)
+        # Top (sigma) Overlap (round 2 on)
         if model_top is not None and sigma_ov_min2 is not None and sigma_ov_max2 is not None:
             L_overlap += loss_interface_overlap(
                 model, model_top, rho_min, rho_max, t_min, t_max, sigma_ov_min2, sigma_ov_max2, n_interface
@@ -750,7 +750,7 @@ def train_one_block_joint_2d(
         return loss, L_pde, L_consist, L_bc, L_overlap, L_sign, L_mag, L_weak
 
     for epoch in range(start_epoch, n_epochs):
-        global _epoch_ratio # 既存の宣言を維持
+        global _epoch_ratio # keep the existing declaration
         _epoch_ratio = epoch / n_epochs
 
         model.train()
@@ -816,7 +816,7 @@ def train_one_block_joint_2d(
 
     #hp.w_sign = 1.0
     
-    # 規定エポック終了時点の lr を固定
+    # freeze the lr at the value it had when the scheduled epochs finished
     final_lr = optimizer.param_groups[0]["lr"]
     for g in optimizer.param_groups:
         g["lr"] = final_lr
@@ -842,7 +842,7 @@ def train_one_block_joint_2d(
             print(f"  Extra block {iblock+1} / {max_extra_blocks}")
 
             for i in range(extra_block_size):
-                # epoch 比率はログ用途だけ
+                # the epoch ratio is for logging only
                 _epoch_ratio = (n_epochs + iblock * extra_block_size + i) / (
                     n_epochs + max_extra_blocks * extra_block_size
                 )
@@ -850,12 +850,12 @@ def train_one_block_joint_2d(
                 model.train()
                 optimizer.zero_grad()
 
-                lr = optimizer.param_groups[0]["lr"]  # 固定だがログには出す
+                lr = optimizer.param_groups[0]["lr"]  # fixed, but still logged
 
                 loss, L_pde, L_consist, L_bc, L_overlap, L_sign, L_mag, L_weak = compute_losses()
                 loss.backward()
                 optimizer.step()
-                # scheduler.step() は呼ばない
+                # do not call scheduler.step()
 
                 history.append([
                     loss.item(),
@@ -869,7 +869,7 @@ def train_one_block_joint_2d(
                 ])
 
 
-            # ブロックを100ステップ回し切ったあとで評価
+            # evaluate after running the block for the full 100 steps
             if hp.w_sign == 0:
                 loss_sm = L_mag.item()
             else:
@@ -911,7 +911,7 @@ def train_one_block_joint_2d(
 
 
 
-    # 2D用ディレクトリの作成
+    # create the directory for 2D
     os.makedirs("./data_UV_2D", exist_ok=True)
     torch.save(model.state_dict(), save_name_model)
     print(f"Saved model to {save_name_model}")
@@ -965,7 +965,7 @@ def train_rho_sigma_window_joint(
     has_left_interface = (rho_ov_min is not None) and all(m is not None for m in model_left_blocks)
     has_bottom_interface = (sigma_ov_min is not None) and all(m is not None for m in model_bottom_blocks)
     
-    # どちらかのインターフェースが存在すればOverlap lossを有効にする
+    # enable the overlap loss if either interface is present
     w_ov_actual = w_overlap if (has_left_interface or has_bottom_interface) else 0.0
 
     t_blocks = [
@@ -1023,7 +1023,7 @@ def train_rho_sigma_window_joint(
             model_bottom=model_bottom_blocks[iblock - 1] if has_bottom_interface else None,
             sigma_ov_min=sigma_ov_min,
             sigma_ov_max=sigma_ov_max,
-            rho_min=rho_min,     # bottom計算時に必要
+            rho_min=rho_min,     # needed when computing bottom
             rho_max=rho_max,
             t_min=t0,
             t_max=t1,
@@ -1063,7 +1063,7 @@ def train_rho_sigma_window_joint(
     return all_hist_local, trained_models
 
 # ============================================================
-# Main 2D Loop (途中再開・レジューム対応版)
+# Main 2D Loop (supports partway restart / resume)
 # ============================================================
 def train_rho_sigma(n_epochs=1000, rho_blocks=None, sigma_blocks=None):
     all_hist = {}
@@ -1081,16 +1081,16 @@ def train_rho_sigma(n_epochs=1000, rho_blocks=None, sigma_blocks=None):
     d_sigma = 0.350
     sigma_overlap = 0.02
 
-    # 引数で指定がない場合は全ブロックを実行
+    # run all blocks if none specified in the arguments
     if rho_blocks is None:
         rho_blocks = list(range(n_rho_blocks))
     if sigma_blocks is None:
         sigma_blocks = list(range(n_sigma_blocks))
 
-    # 2次元の学習済みモデルを保持するリスト [irho][isigma]
+    # list holding the trained 2D models [irho][isigma]
     trained_grid_models = [[None for _ in range(n_sigma_blocks)] for _ in range(n_rho_blocks)]
 
-    # --- ヘルパー関数：指定した (irho, isigma) の学習済みモデルが存在すればロードする ---
+    # --- helper: load the trained model of the given (irho, isigma) if it exists ---
     def try_load_models(r_idx, s_idx):
         r_start = r_idx * d_rho
         r_end = (r_idx + 1) * d_rho + (rho_overlap if r_idx < n_rho_blocks - 1 else 0.0)
@@ -1101,7 +1101,7 @@ def train_rho_sigma(n_epochs=1000, rho_blocks=None, sigma_blocks=None):
         loaded = [None, None]
 
         for iblock, (t0, t1) in enumerate(t_blocks, start=1):
-            # hp.skip_2nd がTrueの場合は第2ブロックをスキップ
+            # skip the second block if hp.skip_2nd is True
             if (t0, t1) == (-2.0, -1.0) and getattr(hp, 'skip_2nd', False):
                 continue
             
@@ -1114,14 +1114,14 @@ def train_rho_sigma(n_epochs=1000, rho_blocks=None, sigma_blocks=None):
                     sigma0=s_start, sigma1=s_end
                 )
             else:
-                # 必要なブロックが一つでも欠けていればロード未完了とみなす
+                # if even one required block is missing, treat the load as incomplete
                 return [None, None]
         return loaded
     # --------------------------------------------------------------------------
 
     for irho in rho_blocks:
         for isigma in sigma_blocks:
-            # 範囲外の指定をスキップ
+            # skip out-of-range specifications
             if irho >= n_rho_blocks or isigma >= n_sigma_blocks:
                 continue
 
@@ -1135,35 +1135,35 @@ def train_rho_sigma(n_epochs=1000, rho_blocks=None, sigma_blocks=None):
             sigma_ov_min = sigma_start if isigma > 0 else None
             sigma_ov_max = sigma_start + sigma_overlap if isigma > 0 else None
 
-            # 1. 自身のブロックがすでに学習済みの場合はスキップ
+            # 1. skip if this block itself is already trained
             current_models = try_load_models(irho, isigma)
             if current_models[0] is not None:
-                print(f"\n--- rho block {irho} | sigma block {isigma} は学習済みのためロードしてスキップします ---")
+                print(f"\n--- rho block {irho} | sigma block {isigma} already trained; loading and skipping ---")
                 trained_grid_models[irho][isigma] = current_models
                 continue
 
             print(f"\n===== rho block {irho}: [{rho_start:.3f}, {rho_end:.3f}] | sigma block {isigma}: [{sigma_start:.3f}, {sigma_end:.3f}] =====")
 
-            # 2. 左側(irho-1)と下側(isigma-1)の境界モデルを取得・必要に応じてロード
+            # 2. obtain the left (irho-1) and bottom (isigma-1) boundary models, loading as needed
             left_models = [None, None]
             if irho > 0:
                 left_models = trained_grid_models[irho - 1][isigma]
                 if left_models is None or left_models[0] is None:
-                    print(f"  --> 左側境界 (rho={irho-1}, sig={isigma}) の学習済みモデルをディスクからロードします")
+                    print(f"  --> loading the trained model of the left boundary (rho={irho-1}, sig={isigma}) from disk")
                     left_models = try_load_models(irho - 1, isigma)
                     trained_grid_models[irho - 1][isigma] = left_models
                     if left_models[0] is None:
-                        print(f"  Warning: 左側境界のモデルが見つかりません (rho={irho-1}, sig={isigma})")
+                        print(f"  Warning: left-boundary model not found (rho={irho-1}, sig={isigma})")
 
             bottom_models = [None, None]
             if isigma > 0:
                 bottom_models = trained_grid_models[irho][isigma - 1]
                 if bottom_models is None or bottom_models[0] is None:
-                    print(f"  --> 下側境界 (rho={irho}, sig={isigma-1}) の学習済みモデルをディスクからロードします")
+                    print(f"  --> loading the trained model of the bottom boundary (rho={irho}, sig={isigma-1}) from disk")
                     bottom_models = try_load_models(irho, isigma - 1)
                     trained_grid_models[irho][isigma - 1] = bottom_models
                     if bottom_models[0] is None:
-                        print(f"  Warning: 下側境界のモデルが見つかりません (rho={irho}, sig={isigma-1})")
+                        print(f"  Warning: bottom-boundary model not found (rho={irho}, sig={isigma-1})")
 
             if rho_ov_min is not None:
                 print(f"      Overlap Left (rho) : [{rho_ov_min:.3f}, {rho_ov_max:.3f}]")
@@ -1192,7 +1192,7 @@ def train_rho_sigma(n_epochs=1000, rho_blocks=None, sigma_blocks=None):
     return all_hist
 
 # ============================================================
-# Main 2D Loop (2周目: 右・上境界の界面連続性も含む平滑化パス)
+# Main 2D Loop (round 2: a smoothing pass that also includes interface continuity on the right/top boundaries)
 # ============================================================
 
 def train_rho_sigma_window_joint_round2(
@@ -1241,7 +1241,7 @@ def train_rho_sigma_window_joint_round2(
     has_right_interface = (rho_ov_min2 is not None) and all(m is not None for m in model_right_blocks)
     has_top_interface = (sigma_ov_min2 is not None) and all(m is not None for m in model_top_blocks)
 
-    # いずれかのインターフェースが存在すればOverlap lossを有効にする
+    # enable the overlap loss if any interface is present
     w_ov_actual = w_overlap if (
         has_left_interface or has_bottom_interface or has_right_interface or has_top_interface
     ) else 0.0
@@ -1281,7 +1281,7 @@ def train_rho_sigma_window_joint_round2(
         if prev_model_file is not None:
             model.load_state_dict(torch.load(prev_model_file, map_location=device))
         else:
-            # 1周目(src_dir)の同一セル・同一blockの学習済み重みでウォームスタートする
+            # warm-start from the trained weights of the same cell and same block from round 1 (src_dir)
             warm_file = f"{src_dir}/model_higgs_singlet_u_rho{irho}_sig{isigma}_block{iblock}.pt"
             if os.path.exists(warm_file):
                 model.load_state_dict(torch.load(warm_file, map_location=device))
@@ -1312,7 +1312,7 @@ def train_rho_sigma_window_joint_round2(
             model_top=model_top_blocks[iblock - 1] if has_top_interface else None,
             sigma_ov_min2=sigma_ov_min2,
             sigma_ov_max2=sigma_ov_max2,
-            rho_min=rho_min,     # bottom計算時に必要
+            rho_min=rho_min,     # needed when computing bottom
             rho_max=rho_max,
             t_min=t0,
             t_max=t1,
@@ -1359,9 +1359,10 @@ def train_rho_sigma_round2(
     src_dir="./data_UV_2D",
     out_dir="./data_UV_2D_round2",
 ):
-    """1周目(src_dir)で完成した25セル×2ブロックの解を初期値としてウォームスタートし、
-    今まで課されていなかった右・上方向の界面連続性lossも加えて再学習する2周目パス。
-    保存先はsrc_dirとは別のout_dirであり、src_dirの内容は一切変更しない。
+    """Round-2 pass: warm-start from the 25-cell x 2-block solution completed in
+    round 1 (src_dir) as the initial guess, and retrain with the previously
+    unimposed right/top interface-continuity loss added. The output goes to
+    out_dir, separate from src_dir; the contents of src_dir are never modified.
     """
     all_hist = {}
 
@@ -1385,7 +1386,7 @@ def train_rho_sigma_round2(
     if sigma_blocks is None:
         sigma_blocks = list(range(n_sigma_blocks))
 
-    # 2周目の学習済みモデルを保持するリスト [irho][isigma]
+    # list holding the round-2 trained models [irho][isigma]
     trained_grid_models = [[None for _ in range(n_sigma_blocks)] for _ in range(n_rho_blocks)]
 
     def try_load_models_from(r_idx, s_idx, data_dir):
@@ -1410,7 +1411,7 @@ def train_rho_sigma_round2(
                     sigma0=s_start, sigma1=s_end
                 )
             else:
-                # 必要なブロックが一つでも欠けていればロード未完了とみなす
+                # if even one required block is missing, treat the load as incomplete
                 return [None, None]
         return loaded
 
@@ -1433,56 +1434,56 @@ def train_rho_sigma_round2(
             sigma_ov_min2 = sigma_end - sigma_overlap if isigma < n_sigma_blocks - 1 else None
             sigma_ov_max2 = sigma_end if isigma < n_sigma_blocks - 1 else None
 
-            # 1. このセルが2周目(out_dir)で既に学習済みならロードしてスキップ
+            # 1. if this cell is already trained in round 2 (out_dir), load and skip
             current_models = try_load_models_from(irho, isigma, out_dir)
             if current_models[0] is not None:
-                print(f"\n--- [round2] rho block {irho} | sigma block {isigma} は学習済みのためロードしてスキップします ---")
+                print(f"\n--- [round2] rho block {irho} | sigma block {isigma} already trained; loading and skipping ---")
                 trained_grid_models[irho][isigma] = current_models
                 continue
 
-            # 2. ウォームスタート元(1周目 src_dir)の存在確認。無ければこのセルはスキップ
+            # 2. check that the warm-start source (round 1 src_dir) exists; skip this cell if not
             warm_file0 = f"{src_dir}/model_higgs_singlet_u_rho{irho}_sig{isigma}_block1.pt"
             if not os.path.exists(warm_file0):
-                print(f"  Warning: 1周目のモデルが見つかりません (rho={irho}, sig={isigma})。"
-                      f"このセルはスキップします: {warm_file0}")
+                print(f"  Warning: round-1 model not found (rho={irho}, sig={isigma}). "
+                      f"Skipping this cell: {warm_file0}")
                 continue
 
             print(f"\n===== [round2] rho block {irho}: [{rho_start:.3f}, {rho_end:.3f}] | "
                   f"sigma block {isigma}: [{sigma_start:.3f}, {sigma_end:.3f}] =====")
 
-            # 3. 左側(irho-1)・下側(isigma-1)は、この2周目パス内で既に再学習済みのはずなので out_dir から取得
+            # 3. the left (irho-1) and bottom (isigma-1) cells should already be retrained in this round-2 pass, so take them from out_dir
             left_models = [None, None]
             if irho > 0:
                 left_models = trained_grid_models[irho - 1][isigma]
                 if left_models is None or left_models[0] is None:
-                    print(f"  --> 左側境界 (rho={irho-1}, sig={isigma}) の2周目モデルをディスクからロードします")
+                    print(f"  --> loading the round-2 model of the left boundary (rho={irho-1}, sig={isigma}) from disk")
                     left_models = try_load_models_from(irho - 1, isigma, out_dir)
                     trained_grid_models[irho - 1][isigma] = left_models
                     if left_models[0] is None:
-                        print(f"  Warning: 左側境界の2周目モデルが見つかりません (rho={irho-1}, sig={isigma})")
+                        print(f"  Warning: round-2 left-boundary model not found (rho={irho-1}, sig={isigma})")
 
             bottom_models = [None, None]
             if isigma > 0:
                 bottom_models = trained_grid_models[irho][isigma - 1]
                 if bottom_models is None or bottom_models[0] is None:
-                    print(f"  --> 下側境界 (rho={irho}, sig={isigma-1}) の2周目モデルをディスクからロードします")
+                    print(f"  --> loading the round-2 model of the bottom boundary (rho={irho}, sig={isigma-1}) from disk")
                     bottom_models = try_load_models_from(irho, isigma - 1, out_dir)
                     trained_grid_models[irho][isigma - 1] = bottom_models
                     if bottom_models[0] is None:
-                        print(f"  Warning: 下側境界の2周目モデルが見つかりません (rho={irho}, sig={isigma-1})")
+                        print(f"  Warning: round-2 bottom-boundary model not found (rho={irho}, sig={isigma-1})")
 
-            # 4. 右側(irho+1)・上側(isigma+1)は、この掃引順ではまだ2周目未処理なので1周目(src_dir)固定で参照
+            # 4. the right (irho+1) and top (isigma+1) cells are not yet processed in round 2 in this sweep order, so reference the fixed round-1 (src_dir) versions
             right_models = [None, None]
             if irho < n_rho_blocks - 1:
                 right_models = try_load_models_from(irho + 1, isigma, src_dir)
                 if right_models[0] is None:
-                    print(f"  Warning: 右側境界の1周目モデルが見つかりません (rho={irho+1}, sig={isigma})")
+                    print(f"  Warning: round-1 right-boundary model not found (rho={irho+1}, sig={isigma})")
 
             top_models = [None, None]
             if isigma < n_sigma_blocks - 1:
                 top_models = try_load_models_from(irho, isigma + 1, src_dir)
                 if top_models[0] is None:
-                    print(f"  Warning: 上側境界の1周目モデルが見つかりません (rho={irho}, sig={isigma+1})")
+                    print(f"  Warning: round-1 top-boundary model not found (rho={irho}, sig={isigma+1})")
 
             if rho_ov_min is not None:
                 print(f"      Overlap Left   (rho)   : [{rho_ov_min:.3f}, {rho_ov_max:.3f}]")

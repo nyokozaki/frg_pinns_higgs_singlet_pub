@@ -1,14 +1,15 @@
 """
-frg_discrete/perturbation/rges.py + frg_discrete/running_couplings.py の
-singlet除去版(6変数 [g1,g2,g3,yt,lam,mhsq] のみ)。
+Singlet-removed version of frg_discrete/perturbation/rges.py +
+frg_discrete/running_couplings.py (only the 6 variables [g1,g2,g3,yt,lam,mhsq]).
 
-frg_pinns_higgs_only/perturbation/rges.py で検証済みの縮約と同じ
-beta functions を移植したもの(lamHS=0 を恒等的に課すのと数値的に同値 —
-b1_lamHS, b2_lamHS は全項が lamHS に比例するため)。
+Ports the same beta functions as the reduction validated in
+frg_pinns_higgs_only/perturbation/rges.py (numerically equivalent to imposing
+lamHS=0 identically -- every term of b1_lamHS, b2_lamHS is proportional to
+lamHS).
 
-CW補正 (calculate_cw_corrections) は空間1方向 (rho) だけなので、共有版が
-torch自動微分と併用しているnumpy中心差分フォールバックのみで十分
-(precision上の問題はない)。
+The CW correction (calculate_cw_corrections) is along a single spatial direction
+(rho) only, so the numpy central-difference fallback that the shared version uses
+alongside torch autodiff is sufficient here (no precision problem).
 """
 
 import numpy as np
@@ -23,7 +24,7 @@ eps = 1e-10
 
 
 # ==========================================
-# 1. 質量とCWポテンシャル (Higgs単一チャンネル、NumPy)
+# 1. Masses and the CW potential (single Higgs channel, NumPy)
 # ==========================================
 
 def scalar_masses_bare(rho_phys, params, kt):
@@ -57,9 +58,10 @@ def u_CW_zeroT(rho_phys, params, kt):
         m2_abs = np.abs(m2) + eps
         return (dof / (64.0 * np.pi ** 2)) * (m2 ** 2) * (np.log(m2_abs) - c)
 
-    # Goldstone (cw_G) は matching sum から除外 (tree-level EW点でmG2=0
-    # ちょうどになり curvature が Goldstone-boson-catastrophe log発散に
-    # 支配されるため; frg_pinns_higgs_only/perturbation/rges.py と同じ扱い)
+    # Goldstone (cw_G) is excluded from the matching sum (at the tree-level EW
+    # point mG2=0 exactly, so the curvature is dominated by the
+    # Goldstone-boson-catastrophe log divergence; same treatment as
+    # frg_pinns_higgs_only/perturbation/rges.py)
     cw_H = cw_term(mH2_b, 1.0, 1.5)
     cw_W = cw_term(mW_T2, 6.0, 5.0 / 6.0)
     cw_Z = cw_term(mZ_T2, 3.0, 5.0 / 6.0)
@@ -68,7 +70,7 @@ def u_CW_zeroT(rho_phys, params, kt):
 
 
 def calculate_cw_corrections(params, kt):
-    """rho方向1本の数値中心差分でCW補正 (delta_mhsq, delta_lamH) を求める。"""
+    """Obtain the CW corrections (delta_mhsq, delta_lamH) by a single numerical central difference in rho."""
     rho0 = vew ** 2 / (kt ** 2)
     h = 1e-4 * max(rho0, 1.0)
 
@@ -85,7 +87,7 @@ def calculate_cw_corrections(params, kt):
 
 
 # ==========================================
-# 2. 初期化とRGEの実行
+# 2. Initialization and running the RGEs
 # ==========================================
 
 def default_init(mu0=150.0, yt=0.9):
@@ -211,7 +213,7 @@ def make_running_couplings(mu0=150.0, mu_end=2000.0, init=None, method="RK45", r
 
 
 # ==========================================
-# 3. FRG UVマッチング (frg_discrete/running_couplings.py と同じ役割)
+# 3. FRG UV matching (same role as frg_discrete/running_couplings.py)
 # ==========================================
 
 rc = make_running_couplings(mu0=k_IR, mu_end=2000.0)

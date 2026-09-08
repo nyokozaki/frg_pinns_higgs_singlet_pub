@@ -1,23 +1,24 @@
 """
-frg_pinns_higgs_singlet/thermal_functions.py の u_CW_zeroT / u_thermal_finiteT
-(torch実装) を NumPy に移植したもの。jbjf.py (frg_discrete/perturbation/jbjf.py)
-と同じ移植方針で、torch依存を frg_discrete の numpy版 perturbation/running_couplings
-だけに置き換えている。
+NumPy port of u_CW_zeroT / u_thermal_finiteT (torch implementation) from
+frg_pinns_higgs_singlet/thermal_functions.py. Same porting approach as jbjf.py
+(frg_discrete/perturbation/jbjf.py): the torch dependency is replaced only by
+the numpy perturbation/running_couplings of frg_discrete.
 
-frg_discrete4_main の中で完結させるため、frg_pinns_higgs_singlet 側の
-torchコードには一切依存しない (参照実装としてのみ使った)。既存の
-frg_discrete4_main の慣習 (README参照) 通り、frg_discrete (兄弟フォルダ)
-の共通numpyモジュール (perturbation/, running_couplings.py) は
-_pathsetup.py 経由でそのまま再利用する。
+To keep everything self-contained within frg_discrete4_main, this does not
+depend on any torch code from frg_pinns_higgs_singlet (used only as a reference
+implementation). Following the existing frg_discrete4_main convention (see the
+README), the shared numpy modules of the sibling folder frg_discrete
+(perturbation/, running_couplings.py) are reused as-is via _pathsetup.py.
 
-用途: 「full flow eq. (rloop+eta)」のNewton-Krylov解 (収束していない) と
-比較するための、静的な参照カーブ。running couplings上で評価した
-1-loop Coleman-Weinberg (T=0) + 有限温度1-loop熱ポテンシャルを
-"RGE-run tree + CW (+ thermal)" として提供する。
+Purpose: static reference curves for comparison with the (non-converged)
+Newton-Krylov solution of "the full flow eq. (rloop+eta)". The one-loop
+Coleman-Weinberg (T=0) plus the finite-temperature one-loop thermal potential,
+evaluated on the running couplings, are provided as "RGE-run tree + CW (+ thermal)".
 
-注意: これは Wetterich方程式の rloop (flow項、coth閾値関数、regulator込み)
-とは別物 (静的な摂動論的1-loop有効ポテンシャル)。flow_equation.py 冒頭コメント
-および README の "tree/残差分解" 節参照。
+Note: this is distinct from rloop of the Wetterich equation (the flow term, with
+the coth threshold functions and the regulator); it is a static perturbative
+one-loop effective potential. See the header comment of flow_equation.py and the
+"tree/residual split" section of the README.
 """
 
 import numpy as np
@@ -33,11 +34,12 @@ EPS = 1e-10
 
 def u_tree_rgerun(t_phys, rho_phys, sigma_phys):
     """
-    tree potential を、u_tree_exact (canonical scaling, aH*exp(-2t)) の代わりに
-    running couplings (RGE) をそのまま代入して評価したもの。
-    "RGE-run tree" 系カーブの土台。t=0 (UV) では u_tree_exact と一致するが、
-    t<0 では両者は一般に異なる (canonical scalingはtree-levelのRG不変量を
-    厳密に保つ一方、RGE-runは2-loop走行couplingsの非自明な変化を反映する)。
+    The tree potential evaluated by substituting the running couplings (RGE)
+    directly, instead of u_tree_exact (canonical scaling, aH*exp(-2t)).
+    The basis of the "RGE-run tree" family of curves. At t=0 (UV) it agrees with
+    u_tree_exact, but for t<0 the two differ in general (canonical scaling keeps
+    the tree-level RG invariants exactly, whereas RGE-run reflects the nontrivial
+    change of the two-loop running couplings).
     """
     kt = k_IR * np.exp(-t_range + t_phys)
     lamH_t, lamS_t, lamHS_t = get_running_quartics(t_phys)
@@ -52,7 +54,7 @@ def u_tree_rgerun(t_phys, rho_phys, sigma_phys):
 
 
 def scalar_masses_bare_and_debye(t_phys, rho_phys, sigma_phys):
-    """u_tree_rgerun由来の裸の質量固有値 (bare) と、熱Debye補正込みの質量 (Debye)。"""
+    """Bare mass eigenvalues (from u_tree_rgerun) and the masses including the thermal Debye correction (Debye)."""
     kt = k_IR * np.exp(-t_range + t_phys)
 
     g1_, g2_, yt_, _, _ = get_running_couplings(t_phys)
@@ -124,7 +126,7 @@ def gauge_masses_bare_and_longitudinal_debye(t_phys, rho_phys):
 
 
 def u_CW_zeroT(t_phys, rho_phys, sigma_phys):
-    """静的な T=0 1-loop Coleman-Weinberg補正 (mu=k)。renormalization scale = FRGスケールk。"""
+    """Static T=0 one-loop Coleman-Weinberg correction (mu=k). Renormalization scale = the FRG scale k."""
     (mG2_b, m1_sq_b, m2_sq_b), _ = scalar_masses_bare_and_debye(t_phys, rho_phys, sigma_phys)
     (mW_T2, mZ_T2, mA_T2), _, g1, g2, yt, _ = gauge_masses_bare_and_longitudinal_debye(t_phys, rho_phys)
     mt2 = yt ** 2 * rho_phys
@@ -145,8 +147,9 @@ def u_CW_zeroT(t_phys, rho_phys, sigma_phys):
 
 def u_thermal_finiteT(t_phys, rho_phys, sigma_phys):
     """
-    有限温度1-loop熱ポテンシャル (Arnold-Espinosaの1-loop部分のみ、ring項なし)。
-    J_B/J_Fの引数には裸の(bare)質量を使う (thermal_functions.py と同じ規約)。
+    Finite-temperature one-loop thermal potential (only the one-loop part of
+    Arnold-Espinosa, no ring term). The arguments of J_B/J_F use the bare masses
+    (same convention as thermal_functions.py).
     """
     (mG2_b, m1_sq_b, m2_sq_b), _ = scalar_masses_bare_and_debye(t_phys, rho_phys, sigma_phys)
     (mW_T2, mZ_T2, mA_T2), _, g1, g2, yt, tau_t = gauge_masses_bare_and_longitudinal_debye(t_phys, rho_phys)
@@ -228,13 +231,12 @@ def u_thermal_finiteT_ring(t_phys, rho_phys, sigma_phys):
 
 def set_T_raw(T_raw):
     """
-    perturbation.config_params.tau_uv (モジュールimport時に一度だけ計算される
-    T_RAW/k_IR*exp(t) 定数) を、T_RAW=T_raw [GeV] に差し替えた値で上書きする。
-    tau_uv を直接importしているこのモジュール自身のグローバルと、
-    (呼び出し元が同様に) flow_equation モジュールのグローバルの両方を
-    書き換える必要がある点に注意 (どちらも "from ... import tau_uv" で
-    値をコピーしているため、config_params.tau_uv を書き換えるだけでは
-    反映されない)。
+    Overwrite perturbation.config_params.tau_uv (the T_RAW/k_IR*exp(t) constant
+    computed once at module import) with the value for T_RAW=T_raw [GeV].
+    Note that both this module's own global (which imports tau_uv directly) and
+    (analogously, from the caller) the global of the flow_equation module need to
+    be rewritten -- both copy the value via "from ... import tau_uv", so
+    rewriting config_params.tau_uv alone has no effect.
     """
     global tau_uv
     from perturbation.config_params import k_IR as _k_IR, t as _t

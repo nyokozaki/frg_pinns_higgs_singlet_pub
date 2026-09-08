@@ -24,7 +24,7 @@ set_seed(1234)
 
 
 # ============================================================
-# UV parameters / running couplings (新学習コードと完全一致版)
+# UV parameters / running couplings (exactly matching the new training code)
 # ============================================================
 
 from perturbation.config_params import tau_uv, finite_T, k_IR, t_range, fixed_tau
@@ -218,7 +218,7 @@ def stitched_slice_matched(
     return rho_all, u_tree_all, u_pred_all, np.array(shifts)
 
 # ============================================================
-# Plot stitched t-slices (修正版)
+# Plot stitched t-slices (revised)
 # ============================================================
 
 def plot_u():
@@ -240,25 +240,25 @@ def plot_u():
         t_np = np.full_like(rho_np, t_val)
 
         #finite_T = True
-        # --- リング項の計算と加算 ---
+        # --- compute and add the ring term ---
         if finite_T:
-            # NumPy配列をPyTorchテンソルに変換
+            # convert the NumPy array to a PyTorch tensor
             t_tensor = my_to(t_np)
             rho_tensor = my_to(rho_np)
-            rho_zero_tensor = my_to(np.zeros_like(rho_np)) # rho=0 のテンソル
+            rho_zero_tensor = my_to(np.zeros_like(rho_np)) # tensor at rho=0
 
             with torch.no_grad():
                 u_ring_tensor = get_u_ring(t_tensor, rho_tensor)
                 u_ring_zero_tensor = get_u_ring(t_tensor, rho_zero_tensor)
 
-                # rho=0 での定数項を差し引く
+                # subtract the constant term at rho=0
                 u_ring_net = u_ring_tensor - u_ring_zero_tensor
                 u_ring_np = u_ring_net.detach().cpu().numpy().flatten()
 
-            # NNの予言にリング項を足し合わせる
+            # add the ring term to the NN prediction
             u_pred_with_ring = u_pred_all + u_ring_np
         else:
-            # 有限温度でない場合はリング項を加算しない
+            # do not add the ring term when not at finite temperature
             u_pred_with_ring = u_pred_all
         # ---------------------------
 
@@ -284,7 +284,7 @@ def plot_u():
 
         ax = axes[i]
         ax.plot(rho_all, u_tree_all, 'k-', lw=1.5, label='tree')
-        # ここを u_pred_with_ring に変更
+        # changed here to u_pred_with_ring
         ax.plot(rho_all, u_pred_with_ring, 'r--', lw=1.5, label='NN+ring stitched')
         ax.plot(rho_all, u_pert_vals,      color='tab:blue',  linestyle='-.', lw=1.5, label='RGE (T=0)')
         ax.plot(rho_all, u_finiteT_vals,  color='tab:green', linestyle=':',  lw=1.5, label='finite T')
@@ -507,7 +507,7 @@ def residual_check_blockwise(
             termG_0 = 1.0 / torch.sqrt(torch.clamp(1.0 + mG2, min=eps))
             termH_0 = 1.0 / torch.sqrt(torch.clamp(1.0 + mH2, min=eps))
 
-            # Running couplings を使用
+            # use running couplings
             t_phys_lp = model.unscale_t(t_in).detach()
             with torch.no_grad():
                 g1, g2, yt = get_running_couplings(t_phys_lp)
@@ -561,7 +561,7 @@ def residual_check_blockwise(
             rloop = kloop * loop_sum
             loop_term = torch.clamp(rloop, min=-2.0, max=2.0)
 
-            # Running couplings を使った eta
+            # eta using running couplings
             with torch.no_grad():
                 eta_rho = get_eta_rho(t_phys_lp)
 

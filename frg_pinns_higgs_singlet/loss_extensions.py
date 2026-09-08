@@ -84,7 +84,7 @@ def _loss_sign_and_mag_couplings_tval(
     mag_factor=0.1,
     margin=0,
     tval=-1.0,
-    mask_temp=10.0  # ソフトマスクの急峻さを決める温度パラメータ
+    mask_temp=10.0  # temperature parameter setting the sharpness of the soft mask
 ):
     
     # relative weights
@@ -176,7 +176,7 @@ def _loss_sign_and_mag_couplings_tval(
     
 
     # ==========================================
-    # ソフトマスクの計算 (rho_phys, sigma_phys < x0 の領域に限定)
+    # compute the soft mask (restricted to the region rho_phys, sigma_phys < x0)
     # ==========================================
     mask_rho = torch.sigmoid(mask_temp * (rho_cw_cut - rho_phys))
     mask_sigma = torch.sigmoid(mask_temp * (sigma_cw_cut - sigma_phys))
@@ -188,7 +188,7 @@ def _loss_sign_and_mag_couplings_tval(
         
     
     # ==========================================
-    # ペナルティ項の計算 (masked_mean を使用)
+    # compute the penalty term (using masked_mean)
     # ==========================================
     norm_lamH = float(abs(lamH_tree)) + eps
     norm_lamS = float(abs(lamS_tree)) + eps
@@ -325,7 +325,7 @@ def _loss_sign_and_mag_couplings_tval_finiteT(
     mag_factor=0.1,
     margin=0,
     tval=-1.0,
-    mask_temp=10.0  # ソフトマスクの急峻さを決める温度パラメータ
+    mask_temp=10.0  # temperature parameter setting the sharpness of the soft mask
 ):
     
     # relative weights
@@ -462,8 +462,8 @@ def _loss_sign_and_mag_couplings_tval_finiteT(
     F_H_target = (aH_run) - aH_tree
     F_S_target = (aS_run) - aS_tree
 
-    # --- 追加: 0付近を無視するためのマスク ---
-    f_threshold = 1e-2  # 値のスケールに合わせて適宜調整してください
+    # --- a mask to ignore the region near 0 ---
+    f_threshold = 1e-2  # adjust to the scale of the values as appropriate
     mask_F_H = (torch.abs(F_H_target/aH_tree) > f_threshold).float()
     mask_F_S = (torch.abs(F_S_target/aS_tree) > f_threshold).float()
 
@@ -481,7 +481,7 @@ def _loss_sign_and_mag_couplings_tval_finiteT(
     
 
     # ==========================================
-    # ソフトマスクの計算 (rho_phys, sigma_phys < x0 の領域に限定)
+    # compute the soft mask (restricted to the region rho_phys, sigma_phys < x0)
     # ==========================================
     mask_rho = torch.sigmoid(mask_temp * (rho_cw_cut - rho_phys))
     mask_sigma = torch.sigmoid(mask_temp * (sigma_cw_cut - sigma_phys))
@@ -490,16 +490,16 @@ def _loss_sign_and_mag_couplings_tval_finiteT(
     soft_mask = soft_mask * soft_maskT
 
     def masked_mean(loss_tensor, extra_mask=1.0):
-        """マスクによる加重平均を計算し、有効なサンプルの領域のみでLossを評価する"""
+        """Weighted average by the mask; evaluate the loss only over the region of valid samples."""
         final_mask = soft_mask * extra_mask
         return (loss_tensor * final_mask).sum() / (final_mask.sum() + eps)
 
     # ==========================================
-    # rho > rho_cw_cut / sigma > sigma_cw_cut 側のソフトマスク
-    # (mask_rho / mask_sigma の相補マスク、field ごとに独立)
-    # これらの領域では対応する場の quartic self-coupling (D_H_NN / D_S_NN)
-    # のみを sign+magnitude で縛る。mass-term や Higgs-singlet mixing
-    # (D_HS) はここでは触らない。
+    # soft mask on the rho > rho_cw_cut / sigma > sigma_cw_cut side
+    # (the complement of mask_rho / mask_sigma, independent per field).
+    # In these regions only the corresponding field's quartic self-coupling
+    # (D_H_NN / D_S_NN) is constrained in sign+magnitude. The mass term and the
+    # Higgs-singlet mixing (D_HS) are left untouched here.
     # ==========================================
     mask_rho_hi = torch.sigmoid(mask_temp * (rho_phys - rho_cw_cut))
     mask_sigma_hi = torch.sigmoid(mask_temp * (sigma_phys - sigma_cw_cut))
@@ -524,7 +524,7 @@ def _loss_sign_and_mag_couplings_tval_finiteT(
     mask_D_S = (torch.abs(D_S_target / norm_lamS) > d_threshold).float()
 
     # ==========================================
-    # ペナルティ項の計算 (masked_mean を使用)
+    # compute the penalty term (using masked_mean)
     # ==========================================
     '''
     sH = torch.sign(D_H_target)

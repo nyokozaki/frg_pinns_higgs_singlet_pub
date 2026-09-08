@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-disc_cut ではなく domain restriction (rho,sigma >= 1e-3) を使った
-full flow eq. 4変種 (baseline / +coupling prior / central4 / central4+prior)
-の比較図を T_raw=100, 200 GeV それぞれについて作る。
+Comparison figure of the 4 full-flow-eq. variants (baseline / +coupling prior /
+central4 / central4+prior) using a domain restriction (rho >= 1e-3) instead of
+disc_cut, for T_raw=100 and 200 GeV.
 
-スライスは rho=1e-3 fixed / sigma=1e-3 fixed (旧版の rho=0/sigma=0 は
-domain restriction で除外された領域のため使えない)。
+Slices at rho=1e-3 fixed (the old rho=0 cannot be used because it is a region
+excluded by the domain restriction).
 
-8曲線の対応:
-  (1) numerical (relax_tree)              -> results/case_a.npz (T非依存, domain restrictionなし)
-  (2) tree (UV-matched quartics)          -> u_tree_exact (T非依存)
-  (3) RGE-run tree + CW                   -> cw_thermal.u_CW_zeroT (T非依存)
-  (4) RGE-run tree + CW + thermal         -> cw_thermal.u_thermal_finiteT (T_rawで再評価)
+The 8 curves:
+  (1) numerical (relax_tree)              -> results/case_a.npz (T-independent, no domain restriction)
+  (2) tree (UV-matched quartics)          -> u_tree_exact (T-independent)
+  (3) RGE-run tree + CW                   -> cw_thermal.u_CW_zeroT (T-independent)
+  (4) RGE-run tree + CW + thermal         -> cw_thermal.u_thermal_finiteT (re-evaluated at T_raw)
   (5) full flow eq. relaxation            -> results/full_n21_domrestrict_T{T}_baseline.npz
   (6) full flow eq. + coupling prior      -> results/full_n21_domrestrict_T{T}_prior.npz
   (7) full flow eq., central4             -> results/full_n21_domrestrict_T{T}_central4.npz
