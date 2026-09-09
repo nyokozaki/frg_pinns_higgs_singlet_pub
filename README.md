@@ -61,9 +61,9 @@ repository (they are too large to commit):
 
 | file | contents |
 |---|---|
-| `T100data0903.zip` | 1D slices at `T = 100 GeV`: `data_UV/` (ρ) + `data_sigma/` (σ) + the `hyperparams.py` and `perturbation/config_params.py` used |
-| `T200data0904_maybe_better.zip` | 1D slices at `T = 200 GeV`, same layout |
-| `T1002Ddata0905.zip` | preliminary 2D network at `T = 100 GeV` (`data_UV_2D/`), input to the bounce/vacuum-line result; reuses the `T=100` config |
+| `T100data.zip` | 1D slices at `T = 100 GeV`: `data_UV/` (ρ) + `data_sigma/` (σ) + the `hyperparams.py` and `perturbation/config_params.py` used |
+| `T200data.zip` | 1D slices at `T = 200 GeV`, same layout |
+| `T1002Ddata.zip` | preliminary 2D network at `T = 100 GeV` (`data_UV_2D/`), input to the bounce/vacuum-line result; reuses the `T=100` config |
 
 To use a snapshot, unzip it inside `frg_pinns_higgs_singlet/` — it drops the
 `data_*` directories in place together with the exact `hyperparams.py` /
